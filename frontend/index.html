@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Chalo App</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+          },
+          colors: {
+            brand: {
+              50: '#eef2ff',
+              100: '#e0e7ff',
+              500: '#6366f1',
+              600: '#4f46e5', // Indigo Accent
+              700: '#4338ca',
+              950: '#070a13', // Midnight Black
+            },
+            dark: {
+              50: '#f8fafc',
+              100: '#f1f5f9',
+              800: '#1e293b',
+              900: '#0f172a',
+              950: '#070a13',
+            }
+          },
+          boxShadow: {
+            'glow-indigo': '0 0 25px rgba(99, 102, 241, 0.25)',
+            'glow-blue': '0 0 25px rgba(59, 130, 246, 0.25)',
+            'glow-orange': '0 0 25px rgba(249, 115, 22, 0.25)',
+            'glow-emerald': '0 0 25px rgba(16, 185, 129, 0.25)',
+            'glow-rose': '0 0 25px rgba(244, 63, 94, 0.25)',
+            'soft': '0 4px 20px -2px rgba(0, 0, 0, 0.05)',
+            'float': '0 10px 40px -10px rgba(0,0,0,0.08)',
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    /* Hide scrollbar for clean app-like feel */
+    ::-webkit-scrollbar {
+      display: none;
+    }
+    body {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+      background-color: #f1f5f9; /* Light slate background for desktop simulation */
+      font-family: "Plus Jakarta Sans", sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+    /* Simulate mobile screen on desktop with white background */
+    #root {
+      max-width: 480px;
+      margin: 0 auto;
+      background-color: #ffffff; /* Default fill background color is white */
+      min-height: 100vh;
+      position: relative;
+      box-shadow: 0 0 40px rgba(0,0,0,0.08);
+      overflow-x: hidden;
+      color: #0f172a;
+    }
+    .hide-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+    .hide-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+  </style>
+  </head>
+<body>
+  <div id="root"></div>
+  <script type="module" src="./index.tsx"></script>
+<script type="module" src="/index.js"></script></body>
+</html>
