@@ -1,41 +1,68 @@
 import React, { useState } from 'react';
-import { User, CreditCard, Settings, HelpCircle, Star, ChevronRight, LogOut, Link as LinkIcon, Edit2, Check, X, ShieldCheck, Bell, Eye, Mail, Smartphone } from 'lucide-react';
-import { ViewState } from '../types';
+import { User, CreditCard, Settings, HelpCircle, ChevronRight, LogOut, Link as LinkIcon, Edit2, X, ShieldCheck, Bell, Mail, Smartphone, MapPin, Moon, Sun, Monitor } from 'lucide-react';
+import { ViewState, Theme } from '../types';
 
 interface AccountViewProps {
   onChangeView: (view: ViewState) => void;
   profileName: string;
   onUpdateProfile: (name: string) => void;
+  profileEmail: string;
+  onUpdateEmail: (email: string) => void;
+  profilePhone: string;
+  onUpdatePhone: (phone: string) => void;
+  profileGender: 'Male' | 'Female' | 'Other';
+  onUpdateGender: (gender: 'Male' | 'Female' | 'Other') => void;
+  appTheme: Theme;
+  onUpdateTheme: (theme: Theme) => void;
   preferredPayment: string;
   onUpdatePreferredPayment: (methodId: string) => void;
+  isEditingProfile: boolean;
+  setIsEditingProfile: (val: boolean) => void;
 }
 
-export const AccountView: React.FC<AccountViewProps> = ({ onChangeView, profileName, onUpdateProfile, preferredPayment, onUpdatePreferredPayment }) => {
-  const [isEditing, setIsEditing] = useState(false);
+export const AccountView: React.FC<AccountViewProps> = ({ 
+  onChangeView, 
+  profileName, 
+  onUpdateProfile, 
+  profileEmail,
+  onUpdateEmail,
+  profilePhone,
+  onUpdatePhone,
+  profileGender,
+  onUpdateGender,
+  appTheme,
+  onUpdateTheme,
+  preferredPayment, 
+  onUpdatePreferredPayment, 
+  isEditingProfile, 
+  setIsEditingProfile 
+}) => {
   const [tempName, setTempName] = useState(profileName);
-  const [tempEmail, setTempEmail] = useState('kunal.pareek@gmail.com');
-  const [tempPhone, setTempPhone] = useState('+91 98765 43210');
-  const [tempGender, setTempGender] = useState<'Male' | 'Female' | 'Other'>('Male');
+  const [tempEmail, setTempEmail] = useState(profileEmail);
+  const [tempPhone, setTempPhone] = useState(profilePhone);
+  const [tempGender, setTempGender] = useState<'Male' | 'Female' | 'Other'>(profileGender);
   
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
+  const [tempTheme, setTempTheme] = useState<Theme>(appTheme);
 
   const handleSaveProfile = (e: React.FormEvent) => {
     e.preventDefault();
     if (tempName.trim()) {
       onUpdateProfile(tempName.trim());
-      setIsEditing(false);
+      onUpdateEmail(tempEmail.trim());
+      onUpdatePhone(tempPhone.trim());
+      onUpdateGender(tempGender);
+      setIsEditingProfile(false);
       alert('Profile updated successfully!');
     }
   };
 
-  const paymentOptions = [
-    { id: 'upi-gpay', label: 'Google Pay (UPI)' },
-    { id: 'upi-phonepe', label: 'PhonePe (UPI)' },
-    { id: 'card-hdfc', label: 'HDFC Credit Card' },
-    { id: 'wallet-paytm', label: 'Paytm Wallet' },
-    { id: 'cash', label: 'Cash on Delivery' }
-  ];
+  const handleSaveSettings = () => {
+    onUpdateTheme(tempTheme);
+    setShowSettingsModal(false);
+    alert('Settings saved successfully!');
+  };
 
   return (
     <div className="min-h-screen bg-white pb-24 font-sans text-slate-800">
@@ -48,14 +75,17 @@ export const AccountView: React.FC<AccountViewProps> = ({ onChangeView, profileN
           <div className="flex-1">
             <div className="flex items-center gap-2">
               <h1 className="text-2xl font-bold tracking-tight">{profileName}</h1>
-              <button onClick={() => setIsEditing(true)} className="p-1 text-slate-400 hover:text-white transition-colors">
+              <button onClick={() => setIsEditingProfile(true)} className="p-1 text-slate-400 hover:text-white transition-colors">
                 <Edit2 className="w-4 h-4" />
               </button>
             </div>
-            <p className="text-slate-400 font-medium text-sm mt-0.5">{tempPhone}</p>
-            <div className="flex items-center mt-2 bg-brand-500/10 backdrop-blur-sm inline-flex px-2.5 py-1 rounded-lg text-xs border border-brand-500/20">
-              <Star className="w-3.5 h-3.5 text-amber-400 mr-1.5 fill-amber-400" />
-              <span className="font-bold tracking-wide text-amber-400">4.9 RATING</span>
+            <div className="mt-1 space-y-0.5">
+              <p className="text-slate-400 font-medium text-sm flex items-center gap-1.5">
+                <Smartphone className="w-3.5 h-3.5" /> {profilePhone}
+              </p>
+              <p className="text-slate-400 font-medium text-sm flex items-center gap-1.5">
+                <Mail className="w-3.5 h-3.5" /> {profileEmail}
+              </p>
             </div>
           </div>
         </div>
@@ -69,7 +99,6 @@ export const AccountView: React.FC<AccountViewProps> = ({ onChangeView, profileN
             title="Linked Accounts" 
             subtitle="Manage Uber, Zomato, Airbnb..." 
             onClick={() => onChangeView('linked_accounts')}
-            badge="New"
           />
           <MenuItem 
             icon={<CreditCard className="w-5 h-5" />} 
@@ -78,7 +107,7 @@ export const AccountView: React.FC<AccountViewProps> = ({ onChangeView, profileN
             onClick={() => onChangeView('payment_methods')}
           />
           <MenuItem 
-            icon={<Star className="w-5 h-5" />} 
+            icon={<MapPin className="w-5 h-5" />} 
             title="Saved Places" 
             subtitle="Home, Work & more" 
             onClick={() => onChangeView('address_management')}
@@ -89,10 +118,15 @@ export const AccountView: React.FC<AccountViewProps> = ({ onChangeView, profileN
           <MenuItem 
             icon={<Settings className="w-5 h-5" />} 
             title="Settings" 
-            subtitle="App preferences & payment defaults" 
+            subtitle="App theme & notifications" 
             onClick={() => setShowSettingsModal(true)}
           />
-          <MenuItem icon={<HelpCircle className="w-5 h-5" />} title="Help & Support" subtitle="FAQs, Contact us" />
+          <MenuItem 
+            icon={<HelpCircle className="w-5 h-5" />} 
+            title="Help & Support" 
+            subtitle="Chatbot, FAQs, Contact us" 
+            onClick={() => onChangeView('support')}
+          />
         </div>
 
         <button className="w-full mt-6 bg-slate-50 p-4 rounded-2xl shadow-soft border border-slate-100 flex items-center justify-center text-rose-500 font-bold active:bg-rose-50 transition-colors">
@@ -102,13 +136,13 @@ export const AccountView: React.FC<AccountViewProps> = ({ onChangeView, profileN
       </div>
 
       {/* Edit Profile Modal */}
-      {isEditing && (
-        <div className="fixed inset-x-0 top-0 bottom-14 z-50 flex flex-col justify-end">
-          <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm" onClick={() => setIsEditing(false)}></div>
-          <div className="bg-white rounded-t-[2.5rem] p-6 relative z-10 border-t border-slate-100 max-h-[90vh] w-full overflow-y-auto hide-scrollbar animate-[slideUp_0.3s_ease-out] text-slate-800 pb-8">
+      {isEditingProfile && (
+        <div className="fixed inset-0 z-50 flex flex-col justify-end">
+          <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm" onClick={() => setIsEditingProfile(false)}></div>
+          <div className="bg-white rounded-t-[2.5rem] p-6 relative z-10 border-t border-slate-100 max-h-[90vh] w-full overflow-y-auto hide-scrollbar animate-[slideUp_0.3s_ease-out] text-slate-800 pb-12">
             <div className="w-12 h-1.5 bg-slate-200 rounded-full mx-auto mb-4 cursor-grab"></div>
             <button 
-              onClick={() => setIsEditing(false)}
+              onClick={() => setIsEditingProfile(false)}
               className="absolute top-4 right-4 p-2 bg-slate-100 rounded-full text-slate-500 hover:bg-slate-200 transition-colors"
             >
               <X className="w-5 h-5" />
@@ -201,9 +235,9 @@ export const AccountView: React.FC<AccountViewProps> = ({ onChangeView, profileN
 
       {/* Settings Modal */}
       {showSettingsModal && (
-        <div className="fixed inset-x-0 top-0 bottom-14 z-50 flex flex-col justify-end">
+        <div className="fixed inset-0 z-50 flex flex-col justify-end">
           <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm" onClick={() => setShowSettingsModal(false)}></div>
-          <div className="bg-white rounded-t-[2.5rem] p-6 relative z-10 border-t border-slate-100 max-h-[90vh] w-full overflow-y-auto hide-scrollbar animate-[slideUp_0.3s_ease-out] text-slate-800 pb-8">
+          <div className="bg-white rounded-t-[2.5rem] p-6 relative z-10 border-t border-slate-100 max-h-[90vh] w-full overflow-y-auto hide-scrollbar animate-[slideUp_0.3s_ease-out] text-slate-800 pb-12">
             <div className="w-12 h-1.5 bg-slate-200 rounded-full mx-auto mb-4 cursor-grab"></div>
             <button 
               onClick={() => setShowSettingsModal(false)}
@@ -220,30 +254,33 @@ export const AccountView: React.FC<AccountViewProps> = ({ onChangeView, profileN
               <p className="text-sm text-slate-500 font-medium mt-1">Customize your Chalo experience</p>
             </div>
 
-            {/* Payment Preference */}
+            {/* Theme Selection */}
             <div className="space-y-4 mb-6">
               <h3 className="font-bold text-slate-900 text-sm uppercase tracking-wider flex items-center gap-2">
-                <CreditCard className="w-4 h-4 text-brand-600" /> Payment Preference
+                <Monitor className="w-4 h-4 text-brand-600" /> App Theme
               </h3>
-              <p className="text-xs text-slate-500 leading-relaxed">
-                Select your default payment method. This will be pre-selected automatically during checkout for rides, food, mart, and stays.
-              </p>
-              <div className="bg-slate-50 rounded-2xl border border-slate-100 overflow-hidden divide-y divide-slate-200/60">
-                {paymentOptions.map(option => (
-                  <label 
-                    key={option.id} 
-                    className="flex items-center justify-between p-4 cursor-pointer hover:bg-slate-100/50 transition-colors"
-                  >
-                    <span className="text-sm font-semibold text-slate-800">{option.label}</span>
-                    <input 
-                      type="radio" 
-                      name="preferredPayment" 
-                      checked={preferredPayment === option.id}
-                      onChange={() => onUpdatePreferredPayment(option.id)}
-                      className="w-4 h-4 text-brand-600 focus:ring-brand-500 accent-brand-600"
-                    />
-                  </label>
-                ))}
+              <div className="grid grid-cols-3 gap-3">
+                <button 
+                  onClick={() => setTempTheme('system')}
+                  className={`flex flex-col items-center justify-center p-4 rounded-2xl border transition-all ${tempTheme === 'system' ? 'border-brand-500 bg-brand-50/50 text-brand-700' : 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100'}`}
+                >
+                  <Monitor className="w-6 h-6 mb-2" />
+                  <span className="text-xs font-bold">System</span>
+                </button>
+                <button 
+                  onClick={() => setTempTheme('light')}
+                  className={`flex flex-col items-center justify-center p-4 rounded-2xl border transition-all ${tempTheme === 'light' ? 'border-brand-500 bg-brand-50/50 text-brand-700' : 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100'}`}
+                >
+                  <Sun className="w-6 h-6 mb-2" />
+                  <span className="text-xs font-bold">Light</span>
+                </button>
+                <button 
+                  onClick={() => setTempTheme('dark')}
+                  className={`flex flex-col items-center justify-center p-4 rounded-2xl border transition-all ${tempTheme === 'dark' ? 'border-brand-500 bg-brand-50/50 text-brand-700' : 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100'}`}
+                >
+                  <Moon className="w-6 h-6 mb-2" />
+                  <span className="text-xs font-bold">Dark</span>
+                </button>
               </div>
             </div>
 
@@ -266,7 +303,14 @@ export const AccountView: React.FC<AccountViewProps> = ({ onChangeView, profileN
               </div>
             </div>
 
-            <div className="flex items-center justify-center gap-2 text-xs font-bold text-slate-400 uppercase tracking-wider pt-4 border-t border-slate-100">
+            <button 
+              onClick={handleSaveSettings}
+              className="w-full py-4 mt-4 bg-brand-600 hover:bg-brand-700 text-white rounded-xl font-bold text-lg shadow-md transition-colors"
+            >
+              Save Settings
+            </button>
+
+            <div className="flex items-center justify-center gap-2 text-xs font-bold text-slate-400 uppercase tracking-wider pt-4 mt-4 border-t border-slate-100">
               <ShieldCheck className="w-4 h-4" /> Settings Secured & Saved
             </div>
           </div>
