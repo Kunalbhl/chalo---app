@@ -4,6 +4,7 @@ import { MART_CATEGORIES, MART_ITEMS } from '../constants';
 import { ProviderBadge } from '../components/ProviderBadge';
 import { ChaloLogo } from '../components/Icons';
 import { CartItem, MartItem, ActivityItem, SavedAddress, SavedMethod, WalletItem } from '../types';
+import { RazorpayCheckout } from '../components/RazorpayCheckout';
 
 interface MartViewProps {
   onBack: () => void;
@@ -46,6 +47,7 @@ export const MartView: React.FC<MartViewProps> = ({ onBack, cart, setCart, walle
   const [showPaymentSelector, setShowPaymentSelector] = useState(false);
   const [showAddCardModal, setShowAddCardModal] = useState(false);
   const [showAddUpiModal, setShowAddUpiModal] = useState(false);
+  const [showRazorpay, setShowRazorpay] = useState(false);
   
   // Selected Address & Payment
   const [selectedAddress, setSelectedAddress] = useState<SavedAddress>(
@@ -160,84 +162,65 @@ export const MartView: React.FC<MartViewProps> = ({ onBack, cart, setCart, walle
         alert('Insufficient wallet balance. Please top up or choose another payment method.');
         return;
       }
-      setIsProcessing(true);
-      setTimeout(() => {
-        setWallets(wallets.map(w => w.id === selectedPayment ? { ...w, balance: w.balance - grandTotal } : w));
-        setIsProcessing(false);
-        setBookingSuccess(true);
-        
-        // Log Activity
-        onAddActivity({
-          id: `act-${Date.now()}`,
-          provider: 'chalo',
-          type: 'mart',
-          title: 'Chalo Mart Order',
-          date: 'Just Now',
-          status: 'completed',
-          price: grandTotal
-        });
-
-        // Add Reward Points (1 point per ₹10 spent)
-        const earnedPoints = Math.floor(grandTotal / 10);
-        if (earnedPoints > 0) {
-          onAddRewards(earnedPoints, 'Chalo Mart Order');
-        }
-
-        setCart([]); // Clear cart
-      }, 2000);
+      processBooking(grandTotal);
     } else if (selectedPayment === 'chalo-pay') {
       if (walletBalance < grandTotal) {
         alert('Insufficient Chalo Pay balance. Please top up or choose another payment method.');
         return;
       }
-      setIsProcessing(true);
-      setTimeout(() => {
-        setWalletBalance(prev => prev - grandTotal);
-        setIsProcessing(false);
-        setBookingSuccess(true);
-
-        // Log Activity
-        onAddActivity({
-          id: `act-${Date.now()}`,
-          provider: 'chalo',
-          type: 'mart',
-          title: 'Chalo Mart Order',
-          date: 'Just Now',
-          status: 'completed',
-          price: grandTotal
-        });
-
-        // Add Reward Points
-        const earnedPoints = Math.floor(grandTotal / 10);
-        if (earnedPoints > 0) {
-          onAddRewards(earnedPoints, 'Chalo Mart Order');
-        }
-
-        setCart([]); // Clear cart
-      }, 2000);
+      processBooking(grandTotal);
+    } else if (selectedPayment === 'cash') {
+      processBooking(grandTotal);
     } else {
-      // UPI, Card, Cash
-      setIsProcessing(true);
-      setTimeout(() => {
-        setIsProcessing(false);
-        setBookingSuccess(true);
-        onAddActivity({
-          id: `act-${Date.now()}`,
-          provider: 'chalo',
-          type: 'mart',
-          title: 'Chalo Mart Order',
-          date: 'Just Now',
-          status: 'completed',
-          price: grandTotal
-        });
-        onAddRewards(Math.floor(grandTotal / 10), 'Chalo Mart Order');
-        setCart([]);
-      }, 2000);
+      // UPI, Card
+      setShowRazorpay(true);
     }
+  };
+
+  const processBooking = (amount: number) => {
+    setShowRazorpay(false);
+    setIsProcessing(true);
+    setTimeout(() => {
+      if (selectedPayment === 'chalo-pay') {
+        setWalletBalance(prev => prev - amount);
+      } else if (selectedPayment.startsWith('wallet-')) {
+        setWallets(wallets.map(w => w.id === selectedPayment ? { ...w, balance: w.balance - amount } : w));
+      }
+
+      setIsProcessing(false);
+      setBookingSuccess(true);
+      
+      // Log Activity
+      onAddActivity({
+        id: `act-${Date.now()}`,
+        provider: 'chalo',
+        type: 'mart',
+        title: 'Chalo Mart Order',
+        date: 'Just Now',
+        status: 'completed',
+        price: amount
+      });
+
+      // Add Reward Points (1 point per ₹10 spent)
+      const earnedPoints = Math.floor(amount / 10);
+      if (earnedPoints > 0) {
+        onAddRewards(earnedPoints, 'Chalo Mart Order');
+      }
+
+      setCart([]); // Clear cart
+    }, 2000);
   };
 
   return (
     <div className="min-h-screen bg-white flex flex-col text-slate-800 font-sans relative">
+      {showRazorpay && (
+        <RazorpayCheckout 
+          amount={cartTotal + 25} 
+          onSuccess={() => processBooking(cartTotal + 25)} 
+          onCancel={() => setShowRazorpay(false)} 
+        />
+      )}
+
       {/* Premium Dark Header with Light Grey Search Bar */}
       <div className="bg-slate-950 pt-12 pb-6 px-4 text-white sticky top-0 z-20 rounded-b-3xl shadow-md border-b border-slate-900 backdrop-blur-md">
         <div className="flex items-center justify-between mb-4">
@@ -430,7 +413,7 @@ export const MartView: React.FC<MartViewProps> = ({ onBack, cart, setCart, walle
       {showCheckout && (
         <div className="fixed inset-0 z-50 flex flex-col justify-end">
           <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm" onClick={() => !isProcessing && !bookingSuccess && setShowCheckout(false)}></div>
-          <div className="bg-white rounded-t-[2.5rem] p-6 relative z-10 border-t border-slate-100 max-h-[90vh] w-full overflow-y-auto hide-scrollbar animate-[slideUp_0.3s_ease-out] text-slate-800 pb-8">
+          <div className="bg-white rounded-t-[2.5rem] p-6 relative z-10 border-t border-slate-100 max-h-[90vh] w-full overflow-y-auto hide-scrollbar animate-[slideUp_0.3s_ease-out] text-slate-800 pb-12">
             <div className="w-12 h-1.5 bg-slate-200 rounded-full mx-auto mb-4 cursor-grab"></div>
             <button 
               onClick={() => setShowCheckout(false)}
@@ -566,7 +549,7 @@ export const MartView: React.FC<MartViewProps> = ({ onBack, cart, setCart, walle
       {showAddressSelector && (
         <div className="fixed inset-0 z-50 flex flex-col justify-end">
           <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm" onClick={() => setShowAddressSelector(false)}></div>
-          <div className="bg-white rounded-t-[2rem] p-6 relative z-10 border-t border-slate-100 max-h-[90vh] w-full overflow-y-auto hide-scrollbar animate-[slideUp_0.3s_ease-out] text-slate-800 pb-8">
+          <div className="bg-white rounded-t-[2rem] p-6 relative z-10 border-t border-slate-100 max-h-[90vh] w-full overflow-y-auto hide-scrollbar animate-[slideUp_0.3s_ease-out] text-slate-800 pb-12">
             <div className="w-12 h-1.5 bg-slate-200 rounded-full mx-auto mb-4 cursor-grab"></div>
             <button 
               onClick={() => setShowAddressSelector(false)}
@@ -602,7 +585,7 @@ export const MartView: React.FC<MartViewProps> = ({ onBack, cart, setCart, walle
       {showPaymentSelector && (
         <div className="fixed inset-0 z-50 flex flex-col justify-end">
           <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm" onClick={() => setShowPaymentSelector(false)}></div>
-          <div className="bg-white rounded-t-[2rem] p-6 relative z-10 border-t border-slate-100 max-h-[90vh] w-full overflow-y-auto hide-scrollbar animate-[slideUp_0.3s_ease-out] text-slate-800 pb-8">
+          <div className="bg-white rounded-t-[2rem] p-6 relative z-10 border-t border-slate-100 max-h-[90vh] w-full overflow-y-auto hide-scrollbar animate-[slideUp_0.3s_ease-out] text-slate-800 pb-12">
             <div className="w-12 h-1.5 bg-slate-200 rounded-full mx-auto mb-4 cursor-grab"></div>
             <button 
               onClick={() => setShowPaymentSelector(false)}
@@ -622,223 +605,4 @@ export const MartView: React.FC<MartViewProps> = ({ onBack, cart, setCart, walle
                   selectedPayment === 'chalo-pay' ? 'border-brand-500 bg-brand-50/30' : 'border-slate-100 bg-slate-50 hover:bg-slate-100'
                 }`}
               >
-                <div className="flex items-center gap-3">
-                  <Wallet className="w-5 h-5 text-brand-600" />
-                  <div>
-                    <h4 className="font-bold text-slate-900 text-sm">Chalo Pay Wallet</h4>
-                    <p className="text-xs text-slate-500 mt-0.5">Balance: ₹{walletBalance.toFixed(2)}</p>
-                  </div>
-                </div>
-                {selectedPayment === 'chalo-pay' && <CheckCircle2 className="w-5 h-5 text-brand-600" />}
-              </button>
-
-              {/* Saved UPIs */}
-              <div className="space-y-2">
-                <p className="text-xs font-bold text-slate-400 uppercase tracking-wider pl-1">UPI</p>
-                {upis.map(upi => (
-                  <button 
-                    key={upi.id}
-                    onClick={() => { setSelectedPayment(upi.id); setShowPaymentSelector(false); }}
-                    className={`w-full flex items-center justify-between p-4 rounded-2xl border text-left transition-all ${
-                      selectedPayment === upi.id ? 'border-brand-500 bg-brand-50/30' : 'border-slate-100 bg-slate-50 hover:bg-slate-100'
-                    }`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <Smartphone className="w-5 h-5 text-slate-600" />
-                      <div>
-                        <h4 className="font-bold text-slate-900 text-sm">{upi.title}</h4>
-                        <p className="text-xs text-slate-500 mt-0.5">{upi.subtitle}</p>
-                      </div>
-                    </div>
-                    {selectedPayment === upi.id && <CheckCircle2 className="w-5 h-5 text-brand-600" />}
-                  </button>
-                ))}
-                <button 
-                  onClick={() => setShowAddUpiModal(true)}
-                  className="w-full flex items-center gap-2 p-3 text-brand-600 font-bold text-xs hover:bg-slate-50 rounded-xl transition-colors"
-                >
-                  <Plus className="w-4 h-4" /> Add New UPI ID
-                </button>
-              </div>
-
-              {/* Saved Cards */}
-              <div className="space-y-2">
-                <p className="text-xs font-bold text-slate-400 uppercase tracking-wider pl-1">Credit & Debit Cards</p>
-                {cards.map(card => (
-                  <button 
-                    key={card.id}
-                    onClick={() => { setSelectedPayment(card.id); setShowPaymentSelector(false); }}
-                    className={`w-full flex items-center justify-between p-4 rounded-2xl border text-left transition-all ${
-                      selectedPayment === card.id ? 'border-brand-500 bg-brand-50/30' : 'border-slate-100 bg-slate-50 hover:bg-slate-100'
-                    }`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <CreditCard className="w-5 h-5 text-slate-600" />
-                      <div>
-                        <h4 className="font-bold text-slate-900 text-sm">{card.title}</h4>
-                        <p className="text-xs text-slate-500 mt-0.5">{card.subtitle}</p>
-                      </div>
-                    </div>
-                    {selectedPayment === card.id && <CheckCircle2 className="w-5 h-5 text-brand-600" />}
-                  </button>
-                ))}
-                <button 
-                  onClick={() => setShowAddCardModal(true)}
-                  className="w-full flex items-center gap-2 p-3 text-brand-600 font-bold text-xs hover:bg-slate-50 rounded-xl transition-colors"
-                >
-                  <Plus className="w-4 h-4" /> Add New Card
-                </button>
-              </div>
-
-              {/* Cash on Delivery */}
-              <button 
-                onClick={() => { setSelectedPayment('cash'); setShowPaymentSelector(false); }}
-                className={`w-full flex items-center justify-between p-4 rounded-2xl border text-left transition-all ${
-                  selectedPayment === 'cash' ? 'border-brand-500 bg-brand-50/30' : 'border-slate-100 bg-slate-50 hover:bg-slate-100'
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <Banknote className="w-5 h-5 text-emerald-600" />
-                  <div>
-                    <h4 className="font-bold text-slate-900 text-sm">Cash on Delivery</h4>
-                    <p className="text-xs text-slate-500 mt-0.5">Pay directly to the delivery partner</p>
-                  </div>
-                </div>
-                {selectedPayment === 'cash' && <CheckCircle2 className="w-5 h-5 text-brand-600" />}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Add Card Sub-modal */}
-      {showAddCardModal && (
-        <div className="fixed inset-0 z-50 flex flex-col justify-end">
-          <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm" onClick={() => setShowAddCardModal(false)}></div>
-          <div className="bg-white rounded-t-[2rem] p-6 relative z-10 border-t border-slate-100 max-h-[90vh] w-full overflow-y-auto hide-scrollbar animate-[slideUp_0.3s_ease-out] text-slate-800 pb-8">
-            <div className="w-12 h-1.5 bg-slate-200 rounded-full mx-auto mb-4 cursor-grab"></div>
-            <button 
-              onClick={() => setShowAddCardModal(false)}
-              className="absolute top-4 right-4 p-2 bg-slate-100 rounded-full text-slate-500 hover:bg-slate-200 transition-colors"
-            >
-              <X className="w-5 h-5" />
-            </button>
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="font-bold text-lg text-slate-900">Add New Card</h3>
-            </div>
-
-            <form onSubmit={handleAddCardSubmit} className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Name on Card</label>
-                <input 
-                  type="text" 
-                  required
-                  value={newCardName}
-                  onChange={(e) => setNewCardName(e.target.value)}
-                  placeholder="JOHN DOE" 
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 text-sm text-slate-800 focus:ring-2 focus:ring-brand-500 outline-none font-medium uppercase"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Card Number</label>
-                <input 
-                  type="text" 
-                  required
-                  maxLength={19}
-                  value={newCardNumber}
-                  onChange={(e) => setNewCardNumber(e.target.value.replace(/\D/g, '').replace(/(.{4})/g, '$1 ').trim())}
-                  placeholder="0000 0000 0000 0000" 
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 text-sm text-slate-800 focus:ring-2 focus:ring-brand-500 outline-none font-medium tracking-wide"
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Expiry Date</label>
-                  <input 
-                    type="text" 
-                    required
-                    maxLength={5}
-                    value={newCardExpiry}
-                    onChange={(e) => {
-                      let val = e.target.value;
-                      if (val.length === 2 && newCardExpiry.length === 3) {
-                        val = val.substring(0, 1);
-                      } else {
-                        val = val.replace(/\D/g, '');
-                        if (val.length > 2) {
-                          val = val.substring(0, 2) + '/' + val.substring(2, 4);
-                        }
-                      }
-                      setNewCardExpiry(val);
-                    }}
-                    placeholder="MM/YY" 
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 text-sm text-slate-800 focus:ring-2 focus:ring-brand-500 outline-none font-medium text-center"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">CVV</label>
-                  <input 
-                    type="password" 
-                    required
-                    maxLength={3}
-                    value={newCardCvv}
-                    onChange={(e) => setNewCardCvv(e.target.value.replace(/\D/g, ''))}
-                    placeholder="•••" 
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 text-sm text-slate-800 focus:ring-2 focus:ring-brand-500 outline-none font-medium text-center tracking-widest"
-                  />
-                </div>
-              </div>
-
-              <button 
-                type="submit"
-                className="w-full py-4 bg-brand-600 hover:bg-brand-700 text-white rounded-xl font-bold text-base shadow-md transition-colors"
-              >
-                Save & Use Card
-              </button>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Add UPI Sub-modal */}
-      {showAddUpiModal && (
-        <div className="fixed inset-0 z-50 flex flex-col justify-end">
-          <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm" onClick={() => setShowAddUpiModal(false)}></div>
-          <div className="bg-white rounded-t-[2rem] p-6 relative z-10 border-t border-slate-100 max-h-[90vh] w-full overflow-y-auto hide-scrollbar animate-[slideUp_0.3s_ease-out] text-slate-800 pb-8">
-            <div className="w-12 h-1.5 bg-slate-200 rounded-full mx-auto mb-4 cursor-grab"></div>
-            <button 
-              onClick={() => setShowAddUpiModal(false)}
-              className="absolute top-4 right-4 p-2 bg-slate-100 rounded-full text-slate-500 hover:bg-slate-200 transition-colors"
-            >
-              <X className="w-5 h-5" />
-            </button>
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="font-bold text-lg text-slate-900">Add New UPI ID</h3>
-            </div>
-
-            <form onSubmit={handleAddUpiSubmit} className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">UPI ID</label>
-                <input 
-                  type="text" 
-                  required
-                  value={newUpiId}
-                  onChange={(e) => setNewUpiId(e.target.value)}
-                  placeholder="e.g. name@bank" 
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 text-sm text-slate-800 focus:ring-2 focus:ring-brand-500 outline-none font-medium"
-                />
-              </div>
-
-              <button 
-                type="submit"
-                className="w-full py-4 bg-brand-600 hover:bg-brand-700 text-white rounded-xl font-bold text-base shadow-md transition-colors"
-              >
-                Verify & Use UPI
-              </button>
-            </form>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-};
+                <div className="flex items-
