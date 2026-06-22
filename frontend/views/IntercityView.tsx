@@ -1,633 +1,678 @@
-import React, { useState, useMemo } from 'react';
-import { ArrowLeft, Search, Calendar, Users, MapPin, ArrowUpDown, Loader2, CheckCircle2, ShieldCheck, Info, X, CreditCard, Smartphone, Wallet, UserPlus, UserCheck, Trash2 } from 'lucide-react';
-import { ChaloLogo } from '../components/Icons';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
+import { ArrowLeft, MapPin, Calendar, Users, Search, CheckCircle2, ShieldCheck, Loader2, X, Navigation, Briefcase, Plane, CreditCard, Smartphone, Wallet, Banknote, Sparkles } from 'lucide-react';
+import { ChaloLogo, getVehicleIcon } from '../components/Icons';
+import { ActivityItem, SavedMethod, WalletItem } from '../types';
 import { ProviderBadge } from '../components/ProviderBadge';
-import { IntercityVehicleOption, ActivityItem, Guest } from '../types';
+import { RazorpayCheckout } from '../components/RazorpayCheckout';
 
 interface IntercityViewProps {
   onBack: () => void;
+  currentLocation: string;
+  preferredPayment: string;
+  upis: SavedMethod[];
+  cards: SavedMethod[];
+  wallets: WalletItem[];
+  walletBalance: number;
   onAddActivity: (newActivity: ActivityItem) => void;
-  savedGuests: Guest[];
-  onAddGuest: (guest: Guest) => void;
 }
 
-const INTERCITY_DATABASE: IntercityVehicleOption[] = [
-  { id: 'ic-1', provider: 'chalo', name: 'Chalo Outstation Mini', type: 'Hatchback', description: 'Comfy hatchback for quick getaways', price: 2500, capacity: 4, features: ['AC', 'Music', 'Toll Included'], imageUrl: 'https://images.unsplash.com/photo-1549317661-bd32c8ce0db2?auto=format&fit=crop&w=200&q=80' },
-  { id: 'ic-2', provider: 'ola', name: 'Ola Outstation Sedan', type: 'Sedan', description: 'Spacious sedan for family trips', price: 3200, capacity: 4, features: ['AC', 'Extra Legroom', 'Toll Included'], imageUrl: 'https://images.unsplash.com/photo-1617814076367-b759c7d7e738?auto=format&fit=crop&w=200&q=80' },
-  { id: 'ic-3', provider: 'uber', name: 'Uber Intercity SUV', type: 'SUV', description: 'Premium SUV for group travel', price: 4500, capacity: 6, features: ['AC', 'Carrier', 'Toll Included'], imageUrl: 'https://images.unsplash.com/photo-1519641471654-76ce0107ad1b?auto=format&fit=crop&w=200&q=80' },
-  { id: 'ic-4', provider: 'makemytrip', name: 'MMT Tempo Traveller', type: 'Tempo Traveller', description: '12-seater AC Tempo Traveller', price: 8500, capacity: 12, features: ['AC', 'Pushback Seats', 'Music System'], imageUrl: 'https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?auto=format&fit=crop&w=200&q=80' },
-  { id: 'ic-5', provider: 'redbus', name: 'Volvo Multi-Axle AC Sleeper', type: 'Bus', description: 'Premium sleeper bus service', price: 1200, capacity: 40, features: ['AC', 'Sleeper', 'Blanket', 'Water Bottle'], imageUrl: 'https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?auto=format&fit=crop&w=200&q=80' },
-  { id: 'ic-6', provider: 'chalo', name: 'Chalo AC Seater Bus', type: 'Bus', description: 'Comfortable seater bus', price: 800, capacity: 45, features: ['AC', 'Pushback Seats', 'Charging Point'], imageUrl: 'https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?auto=format&fit=crop&w=200&q=80' },
+interface IntercityVehicle {
+  id: string;
+  name: string;
+  type: string;
+  capacity: number;
+  pricePerKm: number;
+  baseFare: number;
+  imageUrl: string;
+  provider: 'chalo' | 'uber' | 'ola';
+}
+
+const VEHICLES: IntercityVehicle[] = [
+  { id: 'v1', name: 'Sedan', type: 'Dzire, Etios', capacity: 4, pricePerKm: 12, baseFare: 500, imageUrl: 'https://images.unsplash.com/photo-1549317661-bd32c8ce0db2?auto=format&fit=crop&w=200&q=80', provider: 'chalo' },
+  { id: 'v2', name: 'SUV', type: 'Innova, Ertiga', capacity: 6, pricePerKm: 16, baseFare: 800, imageUrl: 'https://images.unsplash.com/photo-1519641471654-76ce0107ad1b?auto=format&fit=crop&w=200&q=80', provider: 'ola' },
+  { id: 'v3', name: 'Premium SUV', type: 'Innova Crysta', capacity: 7, pricePerKm: 20, baseFare: 1000, imageUrl: 'https://images.unsplash.com/photo-1533473359331-0135ef1b58bf?auto=format&fit=crop&w=200&q=80', provider: 'uber' },
+  { id: 'v4', name: 'Tempo Traveller', type: 'Force Traveller', capacity: 12, pricePerKm: 25, baseFare: 1500, imageUrl: 'https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?auto=format&fit=crop&w=200&q=80', provider: 'chalo' },
+  { id: 'v5', name: 'Mini Bus', type: '20 Seater Bus', capacity: 20, pricePerKm: 40, baseFare: 2500, imageUrl: 'https://images.unsplash.com/photo-1570125909232-eb263c188f7e?auto=format&fit=crop&w=200&q=80', provider: 'chalo' },
 ];
 
-export const IntercityView: React.FC<IntercityViewProps> = ({ onBack, onAddActivity, savedGuests, onAddGuest }) => {
-  const [fromCity, setFromCity] = useState('Bengaluru');
-  const [toCity, setToCity] = useState('Mysuru');
-  const [departureDate, setDepartureDate] = useState('Tomorrow');
-  const [passengers, setPassengers] = useState<number>(2);
+const MOCK_CITIES = [
+  'Bengaluru', 'Mysuru', 'Chennai', 'Hyderabad', 'Mumbai', 'Pune', 'Delhi', 'Jaipur'
+];
+
+export const IntercityView: React.FC<IntercityViewProps> = ({ onBack, currentLocation, preferredPayment, upis, cards, wallets, walletBalance, onAddActivity }) => {
+  const [step, setStep] = useState<'search' | 'verify_pickup' | 'results' | 'booking' | 'confirming' | 'accepted' | 'on_way'>('search');
+  const [fromCity, setFromCity] = useState(currentLocation);
+  const [toCity, setToCity] = useState('');
+  const [date, setDate] = useState('Tomorrow');
+  const [passengers, setPassengers] = useState(4);
+  const [luggage, setLuggage] = useState(2);
   
   const [isSearching, setIsSearching] = useState(false);
-  const [showResults, setShowResults] = useState(false);
-  const [selectedVehicle, setSelectedVehicle] = useState<IntercityVehicleOption | null>(null);
+  const [selectedVehicle, setSelectedVehicle] = useState<IntercityVehicle | null>(null);
   
-  // Booking Flow States
-  const [bookingStep, setBookingStep] = useState<'details' | 'guest' | 'payment' | 'success'>('details');
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [bookingSuccess, setBookingSuccess] = useState(false);
-  
-  // Guest Details (Multiple Passengers)
-  const [passengerDetails, setPassengerDetails] = useState<Guest[]>(
-    Array.from({ length: passengers }, (_, i) => ({ id: `temp-${i}`, name: '', phone: '', email: '' }))
-  );
-  const [saveGuestDetails, setSaveGuestDetails] = useState(true);
-  const [showSavedGuests, setShowSavedGuests] = useState<number | null>(null); // Index of passenger being edited
-  
-  // Payment
-  const [selectedPayment, setSelectedPayment] = useState('upi');
+  const [showPaymentSelector, setShowPaymentSelector] = useState(false);
+  const [selectedPayment, setSelectedPayment] = useState<string>(preferredPayment);
+  const [showRazorpay, setShowRazorpay] = useState(false);
 
-  // Update passenger array when count changes
-  React.useEffect(() => {
-    setPassengerDetails(prev => {
-      if (prev.length === passengers) return prev;
-      if (prev.length < passengers) {
-        return [...prev, ...Array.from({ length: passengers - prev.length }, (_, i) => ({ id: `temp-${Date.now()}-${i}`, name: '', phone: '', email: '' }))];
-      }
-      return prev.slice(0, passengers);
-    });
-  }, [passengers]);
+  // Tracking state
+  const [carPos, setCarPos] = useState({ top: '80%', left: '20%' });
 
-  const handleSwapCities = () => {
-    const temp = fromCity;
-    setFromCity(toCity);
-    setToCity(temp);
-  };
+  // Map States
+  const mapRef = useRef<HTMLDivElement>(null);
+  const [map, setMap] = useState<google.maps.Map | null>(null);
+  const [directionsRenderer, setDirectionsRenderer] = useState<google.maps.DirectionsRenderer | null>(null);
+  const autocompleteInputRef = useRef<HTMLInputElement>(null);
+  const pickupInputRef = useRef<HTMLInputElement>(null);
 
-  const handleSearch = () => {
-    if (!fromCity || !toCity) {
-      alert("Please enter both pickup and drop locations.");
-      return;
+  // Initialize Google Map
+  useEffect(() => {
+    if (mapRef.current && !map && window.google) {
+      const newMap = new window.google.maps.Map(mapRef.current, {
+        center: { lat: 12.9716, lng: 77.5946 }, // Default Bengaluru
+        zoom: 13,
+        disableDefaultUI: true,
+      });
+      
+      const newDirectionsRenderer = new window.google.maps.DirectionsRenderer({
+        map: newMap,
+        suppressMarkers: false,
+      });
+
+      setMap(newMap);
+      setDirectionsRenderer(newDirectionsRenderer);
     }
-    setIsSearching(true);
-    setTimeout(() => {
-      setIsSearching(false);
-      setShowResults(true);
-    }, 2000);
-  };
+  }, [mapRef.current]);
 
-  const recommendedType = useMemo(() => {
-    if (passengers <= 4) return 'Sedan';
-    if (passengers <= 6) return 'SUV';
-    if (passengers <= 14) return 'Tempo Traveller';
-    return 'Bus';
-  }, [passengers]);
+  // Initialize Autocomplete for Dropoff
+  useEffect(() => {
+    if (step === 'search' && autocompleteInputRef.current && window.google) {
+      const autocomplete = new window.google.maps.places.Autocomplete(autocompleteInputRef.current, {
+        types: ['geocode', 'establishment'],
+        componentRestrictions: { country: 'in' }
+      });
 
-  const filteredVehicles = useMemo(() => {
-    return INTERCITY_DATABASE.filter(v => v.type === 'Bus' || v.capacity >= passengers).sort((a, b) => {
-      if (a.type === recommendedType && b.type !== recommendedType) return -1;
-      if (a.type !== recommendedType && b.type === recommendedType) return 1;
-      return a.price - b.price;
-    });
-  }, [passengers, recommendedType]);
-
-  const handleBook = (vehicle: IntercityVehicleOption) => {
-    setSelectedVehicle(vehicle);
-    setBookingStep('details');
-  };
-
-  const handleProceedToGuest = () => {
-    setBookingStep('guest');
-  };
-
-  const handlePassengerChange = (index: number, field: keyof Guest, value: string) => {
-    const updated = [...passengerDetails];
-    updated[index] = { ...updated[index], [field]: value };
-    setPassengerDetails(updated);
-  };
-
-  const handleSelectSavedGuest = (index: number, guest: Guest) => {
-    const updated = [...passengerDetails];
-    updated[index] = { ...guest, id: `temp-${Date.now()}` }; // Keep temp ID for form management
-    setPassengerDetails(updated);
-    setShowSavedGuests(null);
-  };
-
-  const handleProceedToPayment = (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    // Validate all passengers have names
-    const isValid = passengerDetails.every(p => p.name.trim() !== '');
-    if (!isValid) {
-      alert('Please enter names for all passengers.');
-      return;
-    }
-
-    if (saveGuestDetails) {
-      passengerDetails.forEach(p => {
-        if (p.name && p.phone) {
-          const exists = savedGuests.some(g => g.phone === p.phone);
-          if (!exists) {
-            onAddGuest({
-              id: `g-${Date.now()}-${Math.random()}`,
-              name: p.name,
-              phone: p.phone,
-              email: p.email || ''
-            });
-          }
+      autocomplete.addListener('place_changed', () => {
+        const place = autocomplete.getPlace();
+        if (place.formatted_address || place.name) {
+          const address = place.formatted_address || place.name || '';
+          setToCity(address);
         }
       });
     }
-    setBookingStep('payment');
-  };
+  }, [step]);
 
-  const confirmBooking = () => {
-    setIsProcessing(true);
-    setTimeout(() => {
-      setIsProcessing(false);
-      setBookingSuccess(true);
-      setBookingStep('success');
-      
-      const totalAmount = selectedVehicle?.type === 'Bus' ? (selectedVehicle.price * passengers) : selectedVehicle?.price || 0;
-
-      onAddActivity({
-        id: `act-${Date.now()}`,
-        provider: selectedVehicle?.provider || 'chalo',
-        type: 'intercity',
-        title: `${selectedVehicle?.name} to ${toCity}`,
-        date: 'Just Now',
-        status: 'completed',
-        price: totalAmount
+  // Initialize Autocomplete for Pickup
+  useEffect(() => {
+    if (step === 'search' && pickupInputRef.current && window.google) {
+      const autocomplete = new window.google.maps.places.Autocomplete(pickupInputRef.current, {
+        types: ['geocode', 'establishment'],
+        componentRestrictions: { country: 'in' }
       });
-    }, 2000);
+
+      autocomplete.addListener('place_changed', () => {
+        const place = autocomplete.getPlace();
+        if (place.formatted_address || place.name) {
+          setFromCity(place.formatted_address || place.name || '');
+        }
+      });
+    }
+  }, [step]);
+
+  // Draw Route when pickup and dropoff are set
+  useEffect(() => {
+    if ((step === 'verify_pickup' || step === 'results') && fromCity && toCity && window.google && directionsRenderer) {
+      const directionsService = new window.google.maps.DirectionsService();
+      directionsService.route(
+        {
+          origin: fromCity,
+          destination: toCity,
+          travelMode: window.google.maps.TravelMode.DRIVING,
+        },
+        (result, status) => {
+          if (status === window.google.maps.DirectionsStatus.OK) {
+            directionsRenderer.setDirections(result);
+          } else {
+            console.error(`error fetching directions ${result}`);
+          }
+        }
+      );
+    }
+  }, [step, fromCity, toCity, directionsRenderer]);
+
+  // Mock distance calculation based on cities
+  const distance = useMemo(() => {
+    if (fromCity.includes('Bengaluru') && toCity.includes('Chennai')) return 350;
+    if (fromCity.includes('Bengaluru') && toCity.includes('Hyderabad')) return 570;
+    return 145; // Default Mysuru
+  }, [fromCity, toCity]);
+
+  const recommendedVehicle = useMemo(() => {
+    if (passengers <= 4 && luggage <= 2) return VEHICLES[0];
+    if (passengers <= 6 && luggage <= 4) return VEHICLES[1];
+    if (passengers <= 7) return VEHICLES[2];
+    if (passengers <= 12) return VEHICLES[3];
+    return VEHICLES[4];
+  }, [passengers, luggage]);
+
+  // Flight Recommendation Logic
+  const flightAlternative = useMemo(() => {
+    if (distance > 300) {
+      return {
+        airline: 'IndiGo',
+        price: 3500 * passengers,
+        duration: '1h 15m',
+        provider: 'makemytrip' as const
+      };
+    }
+    return null;
+  }, [distance, passengers]);
+
+  // Simulate finding a driver and tracking
+  useEffect(() => {
+    if (step === 'confirming') {
+      const timer = setTimeout(() => {
+        setStep('accepted');
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+    
+    if (step === 'accepted') {
+      const timer = setTimeout(() => {
+        setStep('on_way');
+      }, 2000);
+      return () => clearTimeout(timer);
+    }
+
+    if (step === 'on_way') {
+      const interval = setInterval(() => {
+        setCarPos(prev => ({
+          top: `${Math.max(30, parseInt(prev.top) - 5)}%`,
+          left: `${Math.min(70, parseInt(prev.left) + 5)}%`
+        }));
+      }, 2000);
+      return () => clearInterval(interval);
+    }
+  }, [step]);
+
+  const handleSearch = () => {
+    setIsSearching(true);
+    setTimeout(() => {
+      setIsSearching(false);
+      setStep('verify_pickup');
+    }, 1500);
   };
 
-  const closeBookingModal = () => {
-    if (isProcessing) return;
-    setSelectedVehicle(null);
-    setBookingStep('details');
-    setBookingSuccess(false);
-    if (bookingStep === 'success') {
-      setShowResults(false);
+  const handleConfirmPickup = () => {
+    setStep('results');
+  };
+
+  const handleBook = (vehicle: IntercityVehicle) => {
+    setSelectedVehicle(vehicle);
+    setStep('booking');
+  };
+
+  const handleConfirmBooking = () => {
+    if (selectedPayment !== 'cash') {
+      setShowRazorpay(true);
+    } else {
+      processBooking();
     }
   };
 
+  const processBooking = () => {
+    setShowRazorpay(false);
+    setStep('confirming');
+    onAddActivity({
+      id: `act-${Date.now()}`,
+      provider: selectedVehicle?.provider || 'chalo',
+      type: 'intercity',
+      title: `Intercity to ${toCity.split(',')[0]}`,
+      date: 'Just Now',
+      status: 'ongoing',
+      price: (selectedVehicle?.baseFare || 0) + ((selectedVehicle?.pricePerKm || 0) * distance)
+    });
+  };
+
   return (
-    <div className="min-h-screen bg-white flex flex-col font-sans text-slate-800 relative">
+    <div className="min-h-screen bg-brand-950 flex flex-col font-sans text-slate-100 relative overflow-hidden">
+      {showRazorpay && selectedVehicle && (
+        <RazorpayCheckout 
+          amount={(selectedVehicle.baseFare || 0) + ((selectedVehicle.pricePerKm || 0) * distance)} 
+          onSuccess={processBooking} 
+          onCancel={() => setShowRazorpay(false)} 
+        />
+      )}
+
       {/* Header */}
-      <div className="bg-slate-950 pt-12 pb-4 px-4 shadow-sm sticky top-0 z-20 border-b border-slate-900 backdrop-blur-md">
+      <div className="bg-slate-900/90 pt-12 pb-4 px-4 shadow-sm sticky top-0 z-20 border-b border-slate-800/50 backdrop-blur-md">
         <div className="flex items-center gap-3">
-          <button onClick={onBack} className="p-2 -ml-2 rounded-full hover:bg-slate-800 active:bg-slate-700 transition-colors">
+          <button onClick={step === 'search' ? onBack : () => setStep('search')} className="p-2 -ml-2 rounded-full hover:bg-slate-800 active:bg-slate-700 transition-colors">
             <ArrowLeft className="w-6 h-6 text-white" />
           </button>
           <button onClick={onBack} className="active:scale-95 transition-transform hover:scale-105 duration-200">
             <ChaloLogo className="w-8 h-8" />
           </button>
-          <h1 className="font-bold text-xl text-white">Intercity Travel</h1>
+          <h1 className="font-bold text-xl text-white">Intercity Rides</h1>
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4 pb-24 space-y-6">
-        {/* Search Form */}
-        {!showResults && (
-          <div className="bg-slate-50 rounded-3xl p-5 border border-slate-100 shadow-soft space-y-4">
-            {/* From & To Swap */}
-            <div className="relative">
-              <div className="space-y-3">
-                <div className="bg-white p-3.5 rounded-2xl border border-slate-200/80 flex items-center gap-3">
-                  <div className="w-2 h-2 rounded-full bg-blue-500 ring-4 ring-blue-50"></div>
-                  <div className="flex-1 ml-2">
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Pickup City</p>
-                    <input 
-                      type="text" 
-                      value={fromCity} 
-                      onChange={(e) => setFromCity(e.target.value)}
-                      className="w-full bg-transparent border-none outline-none font-bold text-slate-800 text-sm mt-0.5"
-                      placeholder="Enter pickup city"
-                    />
-                  </div>
-                </div>
-                <div className="bg-white p-3.5 rounded-2xl border border-slate-200/80 flex items-center gap-3">
-                  <div className="w-2 h-2 rounded-sm bg-brand-600 ring-4 ring-brand-50"></div>
-                  <div className="flex-1 ml-2">
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Drop City</p>
-                    <input 
-                      type="text" 
-                      value={toCity} 
-                      onChange={(e) => setToCity(e.target.value)}
-                      className="w-full bg-transparent border-none outline-none font-bold text-slate-800 text-sm mt-0.5"
-                      placeholder="Enter drop city"
-                    />
-                  </div>
-                </div>
-              </div>
-              {/* Swap Button */}
-              <button 
-                onClick={handleSwapCities}
-                className="absolute right-4 top-1/2 -translate-y-1/2 bg-brand-600 text-white p-2.5 rounded-xl shadow-md border border-brand-500/30 active:scale-95 transition-transform"
-              >
-                <ArrowUpDown className="w-4 h-4" />
-              </button>
-            </div>
+      {/* Map Background */}
+      <div className="absolute inset-0 z-0 bg-slate-100">
+        <div ref={mapRef} className="absolute inset-0"></div>
+        <div className="absolute inset-0 bg-slate-950/40 pointer-events-none"></div>
 
-            {/* Date & Travellers */}
-            <div className="grid grid-cols-2 gap-3">
-              <div className="bg-white p-3.5 rounded-2xl border border-slate-200/80">
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Departure</p>
+        {/* Simulated Tracking Car */}
+        {(step === 'accepted' || step === 'on_way') && (
+          <div 
+            className="absolute z-10 transition-all duration-[2000ms] ease-linear"
+            style={{ top: carPos.top, left: carPos.left }}
+          >
+            <div className="bg-white p-2 rounded-full shadow-lg border-2 border-brand-500">
+              {getVehicleIcon('suv', "w-6 h-6 text-brand-600")}
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-4 pb-24 space-y-6 relative z-10 pointer-events-none">
+        {step === 'search' && (
+          <div className="bg-slate-900/95 backdrop-blur-md rounded-3xl p-5 border border-slate-800 shadow-lg space-y-4 mt-4 pointer-events-auto">
+            <div className="relative pl-8 mb-2">
+              <div className="absolute left-3 top-4 bottom-4 w-0.5 bg-slate-700"></div>
+              <div className="mb-4 relative">
+                <div className="absolute -left-8 top-3 w-2 h-2 rounded-full bg-blue-500 ring-4 ring-blue-900"></div>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Pickup City</p>
                 <input 
+                  ref={pickupInputRef}
                   type="text" 
-                  value={departureDate} 
-                  onChange={(e) => setDepartureDate(e.target.value)}
-                  className="w-full bg-transparent border-none outline-none font-bold text-slate-800 text-sm mt-0.5"
+                  value={fromCity}
+                  onChange={(e) => setFromCity(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-white focus:ring-2 focus:ring-brand-500 outline-none font-bold text-sm"
                 />
               </div>
-              <div className="bg-white p-3.5 rounded-2xl border border-slate-200/80">
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Passengers</p>
-                <div className="flex items-center justify-between mt-0.5">
-                  <button onClick={() => setPassengers(Math.max(1, passengers - 1))} className="w-6 h-6 bg-slate-100 rounded-md flex items-center justify-center font-bold text-slate-600">-</button>
-                  <span className="font-bold text-slate-800 text-sm">{passengers}</span>
-                  <button onClick={() => setPassengers(passengers + 1)} className="w-6 h-6 bg-slate-100 rounded-md flex items-center justify-center font-bold text-slate-600">+</button>
+              <div className="relative">
+                <div className="absolute -left-8 top-3 w-2 h-2 rounded-sm bg-brand-500 ring-4 ring-brand-900"></div>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Drop City</p>
+                <input 
+                  ref={autocompleteInputRef}
+                  type="text" 
+                  value={toCity}
+                  onChange={(e) => setToCity(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-white focus:ring-2 focus:ring-brand-500 outline-none font-bold text-sm"
+                  placeholder="Where to?"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 pt-2">
+              <div className="bg-slate-950 p-3.5 rounded-2xl border border-slate-800">
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1"><Calendar className="w-3 h-3" /> Date</p>
+                <input 
+                  type="text" 
+                  value={date} 
+                  onChange={(e) => setDate(e.target.value)}
+                  className="w-full bg-transparent border-none outline-none font-bold text-white text-sm mt-1"
+                />
+              </div>
+              <div className="bg-slate-950 p-3.5 rounded-2xl border border-slate-800">
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1"><Users className="w-3 h-3" /> Passengers</p>
+                <div className="flex items-center justify-between mt-1">
+                  <button onClick={() => setPassengers(Math.max(1, passengers - 1))} className="w-6 h-6 bg-slate-800 rounded-md flex items-center justify-center font-bold text-slate-300">-</button>
+                  <span className="font-bold text-white text-sm">{passengers}</span>
+                  <button onClick={() => setPassengers(passengers + 1)} className="w-6 h-6 bg-slate-800 rounded-md flex items-center justify-center font-bold text-slate-300">+</button>
                 </div>
+              </div>
+            </div>
+
+            <div className="bg-slate-950 p-3.5 rounded-2xl border border-slate-800">
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1"><Briefcase className="w-3 h-3" /> Luggage Bags</p>
+              <div className="flex items-center justify-between mt-1">
+                <button onClick={() => setLuggage(Math.max(0, luggage - 1))} className="w-6 h-6 bg-slate-800 rounded-md flex items-center justify-center font-bold text-slate-300">-</button>
+                <span className="font-bold text-white text-sm">{luggage}</span>
+                <button onClick={() => setLuggage(luggage + 1)} className="w-6 h-6 bg-slate-800 rounded-md flex items-center justify-center font-bold text-slate-300">+</button>
               </div>
             </div>
 
             <button 
               onClick={handleSearch}
-              className="w-full py-4 bg-brand-600 hover:bg-brand-700 text-white rounded-2xl font-bold text-base shadow-md transition-colors flex items-center justify-center gap-2"
+              disabled={isSearching || !toCity}
+              className="w-full py-4 mt-2 bg-brand-600 hover:bg-brand-700 text-white rounded-2xl font-bold text-base shadow-md transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
             >
-              Search Vehicles
+              {isSearching ? <Loader2 className="w-5 h-5 animate-spin" /> : <Search className="w-5 h-5" />}
+              {isSearching ? 'Finding Cabs...' : 'Search Cabs'}
             </button>
           </div>
         )}
 
-        {/* Loading State */}
-        {isSearching && (
-          <div className="flex flex-col items-center justify-center py-16 text-center">
-            <Loader2 className="w-12 h-12 text-brand-600 animate-spin mb-4" />
-            <h3 className="font-bold text-lg text-slate-900">Finding Best Options</h3>
-            <p className="text-xs text-slate-500 max-w-[280px] mt-1">
-              Searching Cabs, Tempo Travellers, and Buses for your route...
-            </p>
+        {/* Step 1.5: Verify Pickup */}
+        {step === 'verify_pickup' && (
+          <div className="bg-slate-900 rounded-3xl shadow-lg pointer-events-auto p-6 border border-slate-800 mt-auto absolute bottom-4 left-4 right-4">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="bg-blue-500/20 p-2 rounded-full">
+                <MapPin className="w-5 h-5 text-blue-400" />
+              </div>
+              <div>
+                <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">Pickup Location</p>
+                <p className="font-bold text-white text-sm truncate max-w-[280px]">{fromCity}</p>
+              </div>
+            </div>
+            <button 
+              onClick={handleConfirmPickup}
+              className="w-full py-4 bg-brand-600 hover:bg-brand-700 text-white rounded-xl font-bold text-lg shadow-md transition-colors"
+            >
+              Confirm Pickup
+            </button>
           </div>
         )}
 
-        {/* Results */}
-        {showResults && !isSearching && (
-          <div className="space-y-4">
-            {/* Search Summary Header */}
-            <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100 flex items-center justify-between">
+        {step === 'results' && (
+          <div className="space-y-4 animate-[fadeIn_0.2s_ease-out] pointer-events-auto">
+            <div className="bg-slate-900/95 backdrop-blur-md rounded-2xl p-4 border border-slate-800 shadow-sm flex items-center justify-between">
               <div>
-                <h3 className="font-bold text-slate-900 text-sm">{fromCity} to {toCity}</h3>
-                <p className="text-xs text-slate-500 mt-0.5">{departureDate} • {passengers} Passengers</p>
+                <h3 className="font-bold text-white text-sm">{fromCity.split(',')[0]} to {toCity.split(',')[0]}</h3>
+                <p className="text-xs text-slate-400 mt-0.5">{date} • {passengers} Pax • {luggage} Bags • ~{distance} km</p>
               </div>
-              <button 
-                onClick={() => setShowResults(false)}
-                className="text-brand-600 text-xs font-bold bg-brand-50 px-3 py-1.5 rounded-lg border border-brand-100"
-              >
-                Modify
-              </button>
+              <button onClick={() => setStep('search')} className="text-brand-400 text-xs font-bold bg-brand-500/10 px-3 py-1.5 rounded-lg border border-brand-500/20">Modify</button>
             </div>
 
-            <div className="bg-blue-50 border border-blue-100 rounded-xl p-3 flex gap-3 items-start">
-              <Info className="w-5 h-5 text-blue-500 flex-shrink-0 mt-0.5" />
-              <p className="text-xs text-blue-800 font-medium leading-relaxed">
-                Based on {passengers} passengers, we recommend booking a <span className="font-bold">{recommendedType}</span> for a comfortable journey.
-              </p>
-            </div>
-
-            {/* Vehicle Cards */}
-            <div className="space-y-4">
-              {filteredVehicles.map((vehicle) => {
-                const isRecommended = vehicle.type === recommendedType;
-                const isBus = vehicle.type === 'Bus';
-                const displayPrice = isBus ? vehicle.price * passengers : vehicle.price;
-
-                return (
-                  <div key={vehicle.id} className={`bg-white rounded-3xl p-5 border shadow-soft flex flex-col gap-4 hover:scale-[1.02] transition-transform duration-300 ${isRecommended ? 'border-brand-500 shadow-glow-indigo' : 'border-slate-100'}`}>
-                    {isRecommended && (
-                      <div className="absolute -top-3 left-4 bg-brand-600 text-white text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider shadow-md">
-                        Recommended
-                      </div>
-                    )}
-                    
-                    <div className="flex items-start gap-4">
-                      <img src={vehicle.imageUrl} alt={vehicle.name} className="w-20 h-20 rounded-2xl object-cover border border-slate-200" />
-                      <div className="flex-1">
-                        <div className="flex items-center justify-between mb-1">
-                          <h4 className="font-bold text-slate-900 text-base">{vehicle.name}</h4>
-                          <ProviderBadge provider={vehicle.provider} />
-                        </div>
-                        <p className="text-xs text-slate-500 font-medium">{vehicle.description}</p>
-                        <div className="flex items-center gap-2 mt-2">
-                          <span className="text-[10px] font-bold bg-slate-100 text-slate-600 px-2 py-1 rounded-md flex items-center gap-1">
-                            <Users className="w-3 h-3" /> Up to {vehicle.capacity}
-                          </span>
-                          <span className="text-[10px] font-bold bg-slate-100 text-slate-600 px-2 py-1 rounded-md">
-                            {vehicle.type}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="flex flex-wrap gap-1.5">
-                      {vehicle.features.map((feat, idx) => (
-                        <span key={idx} className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded-md">
-                          ✓ {feat}
-                        </span>
-                      ))}
-                    </div>
-
-                    <div className="flex items-center justify-between pt-4 border-t border-slate-100">
-                      <div>
-                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
-                          {isBus ? `Total for ${passengers} Tickets` : 'Total Fare'}
-                        </p>
-                        <p className="font-black text-xl text-slate-900">₹{displayPrice}</p>
-                      </div>
-                      <button 
-                        onClick={() => handleBook(vehicle)}
-                        className="bg-brand-600 hover:bg-brand-700 text-white font-bold text-sm px-6 py-2.5 rounded-xl transition-colors shadow-md active:scale-95"
-                      >
-                        Book
-                      </button>
-                    </div>
+            {/* Flight Recommendation if distance is long */}
+            {flightAlternative && (
+              <div className="bg-gradient-to-r from-sky-900 to-blue-900 rounded-3xl p-1 border border-sky-700 shadow-md">
+                <div className="bg-slate-900 rounded-[1.3rem] p-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Plane className="w-4 h-4 text-sky-400" />
+                    <span className="text-xs font-bold text-sky-400 uppercase tracking-wider">Faster Alternative</span>
                   </div>
-                );
-              })}
+                  <div className="flex gap-4 items-center">
+                    <div className="w-14 h-14 bg-slate-800 rounded-xl flex items-center justify-center border border-slate-700">
+                      <Plane className="w-8 h-8 text-slate-300" />
+                    </div>
+                    <div className="flex-1">
+                      <h4 className="font-bold text-white">Flight to {toCity.split(',')[0]}</h4>
+                      <p className="text-xs text-slate-400">{flightAlternative.airline} • {flightAlternative.duration}</p>
+                      <p className="font-extrabold text-sky-400 mt-1">₹{flightAlternative.price} total</p>
+                    </div>
+                    <button className="bg-sky-600 text-white px-4 py-2 rounded-xl font-bold text-sm shadow-sm">View</button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* AI Recommendation */}
+            <div className="bg-gradient-to-r from-indigo-900 to-brand-900 rounded-3xl p-1 border border-indigo-700 shadow-md">
+              <div className="bg-slate-900 rounded-[1.3rem] p-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <Sparkles className="w-4 h-4 text-indigo-400" />
+                  <span className="text-xs font-bold text-indigo-400 uppercase tracking-wider">AI Recommended for {passengers} Pax & {luggage} Bags</span>
+                </div>
+                <div className="flex gap-4 items-center">
+                  <img src={recommendedVehicle.imageUrl} alt={recommendedVehicle.name} className="w-24 h-16 object-cover rounded-xl border border-slate-700" />
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-1">
+                      <h4 className="font-bold text-white">{recommendedVehicle.name}</h4>
+                      <ProviderBadge provider={recommendedVehicle.provider} />
+                    </div>
+                    <p className="text-xs text-slate-400">{recommendedVehicle.type}</p>
+                    <p className="font-extrabold text-brand-400 mt-1">₹{recommendedVehicle.baseFare + (recommendedVehicle.pricePerKm * distance)}</p>
+                  </div>
+                  <button onClick={() => handleBook(recommendedVehicle)} className="bg-brand-600 text-white px-4 py-2 rounded-xl font-bold text-sm shadow-sm">Book</button>
+                </div>
+              </div>
+            </div>
+
+            <h3 className="font-bold text-white text-lg pt-2 drop-shadow-sm">Other Options</h3>
+            <div className="space-y-3">
+              {VEHICLES.filter(v => v.id !== recommendedVehicle.id).map(vehicle => (
+                <div key={vehicle.id} className="bg-slate-900/95 backdrop-blur-md rounded-2xl p-4 border border-slate-800 shadow-sm flex gap-4 items-center">
+                  <img src={vehicle.imageUrl} alt={vehicle.name} className="w-20 h-14 object-cover rounded-xl border border-slate-700" />
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-1">
+                      <h4 className="font-bold text-white text-sm">{vehicle.name}</h4>
+                      <ProviderBadge provider={vehicle.provider} />
+                    </div>
+                    <p className="text-[10px] text-slate-400">{vehicle.type} • Up to {vehicle.capacity} seats</p>
+                    <p className="font-extrabold text-slate-200 mt-1">₹{vehicle.baseFare + (vehicle.pricePerKm * distance)}</p>
+                  </div>
+                  <button onClick={() => handleBook(vehicle)} className="bg-slate-800 text-slate-300 px-4 py-2 rounded-xl font-bold text-sm hover:bg-slate-700">Book</button>
+                </div>
+              ))}
             </div>
           </div>
         )}
       </div>
 
-      {/* Multi-step Booking Modal */}
-      {selectedVehicle && (
-        <div className="fixed inset-0 z-50 flex flex-col justify-end">
-          <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm" onClick={closeBookingModal}></div>
-          <div className="bg-white rounded-t-[2.5rem] p-6 relative z-10 border-t border-slate-100 max-h-[92vh] w-full overflow-y-auto hide-scrollbar animate-[slideUp_0.3s_ease-out] text-slate-800 pb-8">
-            <div className="w-12 h-1.5 bg-slate-200 rounded-full mx-auto mb-4 cursor-grab"></div>
+      {/* Booking Modal */}
+      {step === 'booking' && selectedVehicle && (
+        <div className="fixed inset-0 z-50 flex flex-col justify-end pointer-events-auto">
+          <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm" onClick={() => setStep('results')}></div>
+          <div className="bg-slate-900 rounded-t-[2.5rem] p-6 relative z-10 border-t border-slate-800 max-h-[92vh] w-full overflow-y-auto hide-scrollbar animate-[slideUp_0.3s_ease-out] text-slate-100 pb-12">
+            <div className="w-12 h-1.5 bg-slate-700 rounded-full mx-auto mb-4 cursor-grab"></div>
             <button 
-              onClick={closeBookingModal}
-              className="absolute top-4 right-4 p-2 bg-slate-100 rounded-full text-slate-500 hover:bg-slate-200 transition-colors"
-              disabled={isProcessing}
+              onClick={() => setStep('results')}
+              className="absolute top-4 right-4 p-2 bg-slate-800 rounded-full text-slate-400 hover:text-white transition-colors"
             >
               <X className="w-5 h-5" />
             </button>
 
-            {bookingStep === 'details' && (
-              <div className="space-y-6">
-                <div className="text-center">
-                  <h2 className="text-2xl font-extrabold text-slate-900">Booking Details</h2>
-                  <p className="text-sm text-slate-500 font-medium mt-1">Review selection and provide guest info</p>
-                </div>
+            <div className="text-center mb-6">
+              <h2 className="text-2xl font-extrabold text-white">Confirm Booking</h2>
+              <p className="text-sm text-slate-400 font-medium mt-1">Review your intercity ride details</p>
+            </div>
 
-                <div className="flex gap-4 items-center">
-                  <img src={selectedVehicle.imageUrl} alt={selectedVehicle.name} className="w-24 h-24 object-cover rounded-2xl border border-slate-200" />
-                  <div className="flex-1">
-                    <div className="flex justify-between items-center mb-1">
-                      <h3 className="font-bold text-lg text-slate-900">{selectedVehicle.name}</h3>
-                      <ProviderBadge provider={selectedVehicle.provider} />
-                    </div>
-                    <p className="text-xs text-slate-600">{selectedVehicle.description}</p>
+            <div className="bg-slate-950 rounded-2xl p-4 border border-slate-800 space-y-4 mb-6">
+              <div className="flex items-center gap-4">
+                <img src={selectedVehicle.imageUrl} alt={selectedVehicle.name} className="w-20 h-14 object-cover rounded-xl border border-slate-700" />
+                <div>
+                  <div className="flex items-center gap-2 mb-1">
+                    <h4 className="font-bold text-white">{selectedVehicle.name}</h4>
+                    <ProviderBadge provider={selectedVehicle.provider} />
                   </div>
-                </div>
-
-                <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100 space-y-3">
-                  <div className="flex justify-between items-center">
-                    <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Route</span>
-                    <span className="font-bold text-slate-800">{fromCity} → {toCity}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Date</span>
-                    <span className="font-bold text-slate-800">{departureDate}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Passengers</span>
-                    <span className="font-bold text-slate-800">{passengers}</span>
-                  </div>
-                </div>
-
-                <button 
-                  onClick={handleProceedToGuest}
-                  className="w-full py-4 bg-brand-600 hover:bg-brand-700 text-white rounded-xl font-bold text-lg shadow-md transition-colors"
-                >
-                  Proceed to Passenger Details
-                </button>
-              </div>
-            )}
-
-            {bookingStep === 'guest' && (
-              <div className="space-y-6">
-                <div className="flex items-center gap-3 mb-2">
-                  <button onClick={() => setBookingStep('details')} className="p-2 bg-slate-100 rounded-full hover:bg-slate-200">
-                    <ArrowLeft className="w-5 h-5 text-slate-600" />
-                  </button>
-                  <h2 className="text-2xl font-extrabold text-slate-900">Passenger Details</h2>
-                </div>
-                <p className="text-sm text-slate-500 font-medium">Please provide details for all {passengers} passengers.</p>
-
-                <form onSubmit={handleProceedToPayment} className="space-y-6">
-                  {passengerDetails.map((passenger, index) => (
-                    <div key={passenger.id} className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-4 relative">
-                      <div className="flex justify-between items-center">
-                        <h3 className="font-bold text-slate-900 text-sm uppercase tracking-wider">Passenger {index + 1} {index === 0 && '(Primary)'}</h3>
-                        {savedGuests.length > 0 && (
-                          <button 
-                            type="button"
-                            onClick={() => setShowSavedGuests(showSavedGuests === index ? null : index)}
-                            className="text-brand-600 text-xs font-bold flex items-center gap-1"
-                          >
-                            <UserCheck className="w-3.5 h-3.5" /> Saved
-                          </button>
-                        )}
-                      </div>
-
-                      {showSavedGuests === index && savedGuests.length > 0 && (
-                        <div className="bg-white rounded-xl p-2 border border-slate-200 space-y-1 animate-[fadeIn_0.2s_ease-out] absolute z-10 w-[calc(100%-2rem)] shadow-lg">
-                          {savedGuests.map(guest => (
-                            <div 
-                              key={guest.id} 
-                              onClick={() => handleSelectSavedGuest(index, guest)}
-                              className="flex justify-between items-center p-2 hover:bg-slate-50 rounded-lg cursor-pointer transition-colors"
-                            >
-                              <div>
-                                <p className="font-bold text-slate-800 text-sm">{guest.name}</p>
-                                <p className="text-xs text-slate-500">{guest.phone}</p>
-                              </div>
-                              <ChevronRight className="w-4 h-4 text-slate-400" />
-                            </div>
-                          ))}
-                        </div>
-                      )}
-
-                      <div>
-                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Full Name</label>
-                        <input 
-                          type="text" 
-                          required
-                          value={passenger.name}
-                          onChange={(e) => handlePassengerChange(index, 'name', e.target.value)}
-                          placeholder="Enter full name as per ID" 
-                          className="w-full bg-white border border-slate-200 rounded-xl py-3 px-4 text-slate-800 focus:ring-2 focus:ring-brand-500 outline-none font-medium"
-                        />
-                      </div>
-                      
-                      {/* Only require phone/email for primary passenger */}
-                      {index === 0 && (
-                        <>
-                          <div>
-                            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Mobile Number</label>
-                            <input 
-                              type="tel" 
-                              required
-                              value={passenger.phone}
-                              onChange={(e) => handlePassengerChange(index, 'phone', e.target.value)}
-                              placeholder="Enter mobile number" 
-                              className="w-full bg-white border border-slate-200 rounded-xl py-3 px-4 text-slate-800 focus:ring-2 focus:ring-brand-500 outline-none font-medium"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Email Address</label>
-                            <input 
-                              type="email" 
-                              value={passenger.email}
-                              onChange={(e) => handlePassengerChange(index, 'email', e.target.value)}
-                              placeholder="Enter email address (optional)" 
-                              className="w-full bg-white border border-slate-200 rounded-xl py-3 px-4 text-slate-800 focus:ring-2 focus:ring-brand-500 outline-none font-medium"
-                            />
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  ))}
-                  
-                  <div className="flex items-center gap-3 pt-2">
-                    <input 
-                      type="checkbox" 
-                      id="saveGuest" 
-                      checked={saveGuestDetails}
-                      onChange={(e) => setSaveGuestDetails(e.target.checked)}
-                      className="w-4 h-4 text-brand-600 rounded border-slate-300 focus:ring-brand-500 accent-brand-600"
-                    />
-                    <label htmlFor="saveGuest" className="text-sm font-medium text-slate-700 cursor-pointer">
-                      Save these details for future bookings
-                    </label>
-                  </div>
-
-                  <button 
-                    type="submit"
-                    className="w-full py-4 mt-4 bg-brand-600 hover:bg-brand-700 text-white rounded-xl font-bold text-lg shadow-md transition-colors"
-                  >
-                    Proceed to Payment
-                  </button>
-                </form>
-              </div>
-            )}
-
-            {bookingStep === 'payment' && (
-              <div className="space-y-6">
-                <div className="flex items-center gap-3 mb-2">
-                  <button onClick={() => setBookingStep('guest')} className="p-2 bg-slate-100 rounded-full hover:bg-slate-200">
-                    <ArrowLeft className="w-5 h-5 text-slate-600" />
-                  </button>
-                  <h2 className="text-2xl font-extrabold text-slate-900">Payment</h2>
-                </div>
-
-                {/* Price Breakdown */}
-                <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100 space-y-2">
-                  <div className="flex justify-between text-sm font-semibold text-slate-500">
-                    <span>Base Fare ({passengers}x)</span>
-                    <span>₹{selectedVehicle.type === 'Bus' ? (selectedVehicle.price * passengers) - 150 : selectedVehicle.price - 250}</span>
-                  </div>
-                  <div className="flex justify-between text-sm font-semibold text-slate-500">
-                    <span>Taxes & Tolls</span>
-                    <span>₹{selectedVehicle.type === 'Bus' ? 150 : 250}</span>
-                  </div>
-                  <div className="flex justify-between text-base font-bold text-slate-900 pt-2 border-t border-slate-200/60">
-                    <span>Total Amount</span>
-                    <span className="text-brand-600">₹{selectedVehicle.type === 'Bus' ? (selectedVehicle.price * passengers) : selectedVehicle.price}</span>
-                  </div>
-                </div>
-
-                {/* Payment Methods */}
-                <div className="space-y-3">
-                  <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider">Select Payment Method</h3>
-                  
-                  <label className={`flex items-center justify-between p-4 rounded-2xl border cursor-pointer transition-all ${selectedPayment === 'upi' ? 'border-brand-500 bg-brand-50/50' : 'border-slate-200 bg-white'}`}>
-                    <div className="flex items-center gap-3">
-                      <Smartphone className="w-5 h-5 text-slate-600" />
-                      <span className="font-bold text-slate-800 text-sm">UPI (GPay, PhonePe)</span>
-                    </div>
-                    <input type="radio" name="payment" checked={selectedPayment === 'upi'} onChange={() => setSelectedPayment('upi')} className="w-4 h-4 text-brand-600 accent-brand-600" />
-                  </label>
-
-                  <label className={`flex items-center justify-between p-4 rounded-2xl border cursor-pointer transition-all ${selectedPayment === 'card' ? 'border-brand-500 bg-brand-50/50' : 'border-slate-200 bg-white'}`}>
-                    <div className="flex items-center gap-3">
-                      <CreditCard className="w-5 h-5 text-slate-600" />
-                      <span className="font-bold text-slate-800 text-sm">Credit / Debit Card</span>
-                    </div>
-                    <input type="radio" name="payment" checked={selectedPayment === 'card'} onChange={() => setSelectedPayment('card')} className="w-4 h-4 text-brand-600 accent-brand-600" />
-                  </label>
-
-                  <label className={`flex items-center justify-between p-4 rounded-2xl border cursor-pointer transition-all ${selectedPayment === 'wallet' ? 'border-brand-500 bg-brand-50/50' : 'border-slate-200 bg-white'}`}>
-                    <div className="flex items-center gap-3">
-                      <Wallet className="w-5 h-5 text-slate-600" />
-                      <span className="font-bold text-slate-800 text-sm">Wallets</span>
-                    </div>
-                    <input type="radio" name="payment" checked={selectedPayment === 'wallet'} onChange={() => setSelectedPayment('wallet')} className="w-4 h-4 text-brand-600 accent-brand-600" />
-                  </label>
-                </div>
-
-                {isProcessing ? (
-                  <div className="py-4 flex flex-col items-center">
-                    <Loader2 className="w-8 h-8 text-brand-600 animate-spin mb-4" />
-                    <p className="text-sm font-bold text-slate-600">Processing payment securely...</p>
-                  </div>
-                ) : (
-                  <button 
-                    onClick={confirmBooking}
-                    className="w-full py-4 bg-brand-600 hover:bg-brand-700 text-white rounded-xl font-bold text-lg shadow-md transition-colors"
-                  >
-                    Pay ₹{selectedVehicle.type === 'Bus' ? (selectedVehicle.price * passengers) : selectedVehicle.price}
-                  </button>
-                )}
-
-                <div className="flex items-center justify-center gap-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                  <ShieldCheck className="w-4 h-4" /> Secured by Chalo Pay
+                  <p className="text-xs text-slate-400">{selectedVehicle.type}</p>
                 </div>
               </div>
-            )}
-
-            {bookingStep === 'success' && (
-              <div className="flex flex-col items-center text-center py-8">
-                <div className="w-20 h-20 bg-emerald-50 rounded-full flex items-center justify-center mb-6 border border-emerald-100 shadow-sm">
-                  <CheckCircle2 className="w-10 h-10 text-emerald-600" />
-                </div>
-                <h2 className="text-2xl font-extrabold text-slate-900">Booking Confirmed!</h2>
-                <p className="text-sm text-slate-500 font-medium mt-1 max-w-[280px]">
-                  Your intercity travel has been successfully booked via <span className="font-bold text-slate-800 capitalize">{selectedVehicle.provider}</span>.
-                </p>
-                <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100 w-full my-6 text-left space-y-2">
-                  <div className="flex justify-between text-xs font-bold text-slate-400 uppercase tracking-wider">
-                    <span>Vehicle</span>
-                    <span>Booking ID</span>
-                  </div>
-                  <div className="flex justify-between text-sm font-bold text-slate-800">
-                    <span>{selectedVehicle.name}</span>
-                    <span className="font-mono">IC{Math.floor(Math.random() * 900000 + 100000)}</span>
-                  </div>
-                  <div className="pt-2 mt-2 border-t border-slate-200">
-                    <p className="text-xs text-slate-500">Receipt sent to: <span className="font-bold text-slate-700">{passengerDetails[0]?.email || passengerDetails[0]?.phone}</span></p>
-                  </div>
-                </div>
-                <button 
-                  onClick={closeBookingModal}
-                  className="w-full py-4 bg-brand-600 hover:bg-brand-700 text-white rounded-xl font-bold text-lg shadow-md transition-colors"
-                >
-                  Done
-                </button>
+              <div className="pt-3 border-t border-slate-800/60 flex justify-between items-center">
+                <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Route</span>
+                <span className="font-bold text-slate-200">{fromCity.split(',')[0]} → {toCity.split(',')[0]}</span>
               </div>
-            )}
+              <div className="flex justify-between items-center">
+                <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Distance</span>
+                <span className="font-bold text-slate-200">~{distance} km</span>
+              </div>
+              <div className="pt-3 border-t border-slate-800/60 flex justify-between items-center">
+                <span className="font-bold text-white">Total Fare</span>
+                <span className="font-black text-xl text-brand-400">₹{selectedVehicle.baseFare + (selectedVehicle.pricePerKm * distance)}</span>
+              </div>
+            </div>
+
+            {/* Payment Method Selector */}
+            <div className="mb-6">
+              <div className="flex items-center justify-between mb-3 px-1">
+                <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider">Payment Method</h3>
+                <button onClick={() => setShowPaymentSelector(true)} className="text-brand-400 text-xs font-bold">Change</button>
+              </div>
+              <div className="bg-slate-950 rounded-2xl p-4 border border-slate-800 flex items-center gap-3">
+                <CreditCard className="w-5 h-5 text-slate-400" />
+                <span className="font-bold text-white text-sm capitalize">{selectedPayment.replace('-', ' ')}</span>
+              </div>
+            </div>
+
+            <button 
+              onClick={handleConfirmBooking}
+              className="w-full py-4 bg-brand-600 hover:bg-brand-700 text-white rounded-xl font-bold text-lg shadow-md transition-colors"
+            >
+              Confirm & Pay
+            </button>
+            <div className="flex items-center justify-center gap-2 text-[10px] font-bold text-slate-500 uppercase tracking-wider mt-4">
+              <ShieldCheck className="w-4 h-4" /> Secured by Chalo Pay
+            </div>
           </div>
         </div>
       )}
+
+      {/* Payment Method Selector Sub-modal */}
+      {showPaymentSelector && (
+        <div className="fixed inset-0 z-50 flex flex-col justify-end pointer-events-auto">
+          <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm" onClick={() => setShowPaymentSelector(false)}></div>
+          <div className="bg-slate-900 rounded-t-[2rem] p-6 relative z-10 border-t border-slate-800 max-h-[90vh] w-full overflow-y-auto hide-scrollbar animate-[slideUp_0.3s_ease-out] text-slate-100 pb-12">
+            <div className="w-12 h-1.5 bg-slate-700 rounded-full mx-auto mb-4 cursor-grab"></div>
+            <button 
+              onClick={() => setShowPaymentSelector(false)}
+              className="absolute top-4 right-4 p-2 bg-slate-800 rounded-full text-slate-400 hover:text-white transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="font-bold text-lg text-white">Select Payment Method</h3>
+            </div>
+
+            <div className="space-y-4">
+              {/* Chalo Pay Wallet */}
+              <button 
+                onClick={() => { setSelectedPayment('chalo-pay'); setShowPaymentSelector(false); }}
+                className={`w-full flex items-center justify-between p-4 rounded-2xl border text-left transition-all ${
+                  selectedPayment === 'chalo-pay' ? 'border-brand-500 bg-brand-500/10' : 'border-slate-700 bg-slate-800 hover:bg-slate-700'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <Wallet className="w-5 h-5 text-brand-400" />
+                  <div>
+                    <h4 className="font-bold text-white text-sm">Chalo Pay Wallet</h4>
+                    <p className="text-xs text-slate-400 mt-0.5">Balance: ₹{walletBalance.toFixed(2)}</p>
+                  </div>
+                </div>
+                {selectedPayment === 'chalo-pay' && <CheckCircle2 className="w-5 h-5 text-brand-500" />}
+              </button>
+
+              {/* Saved UPIs */}
+              <div className="space-y-2">
+                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider pl-1">UPI</p>
+                {upis.map(upi => (
+                  <button 
+                    key={upi.id}
+                    onClick={() => { setSelectedPayment(upi.id); setShowPaymentSelector(false); }}
+                    className={`w-full flex items-center justify-between p-4 rounded-2xl border text-left transition-all ${
+                      selectedPayment === upi.id ? 'border-brand-500 bg-brand-500/10' : 'border-slate-700 bg-slate-800 hover:bg-slate-700'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <Smartphone className="w-5 h-5 text-slate-400" />
+                      <div>
+                        <h4 className="font-bold text-white text-sm">{upi.title}</h4>
+                        <p className="text-xs text-slate-400 mt-0.5">{upi.subtitle}</p>
+                      </div>
+                    </div>
+                    {selectedPayment === upi.id && <CheckCircle2 className="w-5 h-5 text-brand-500" />}
+                  </button>
+                ))}
+              </div>
+
+              {/* Saved Cards */}
+              <div className="space-y-2">
+                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider pl-1">Credit & Debit Cards</p>
+                {cards.map(card => (
+                  <button 
+                    key={card.id}
+                    onClick={() => { setSelectedPayment(card.id); setShowPaymentSelector(false); }}
+                    className={`w-full flex items-center justify-between p-4 rounded-2xl border text-left transition-all ${
+                      selectedPayment === card.id ? 'border-brand-500 bg-brand-500/10' : 'border-slate-700 bg-slate-800 hover:bg-slate-700'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <CreditCard className="w-5 h-5 text-slate-400" />
+                      <div>
+                        <h4 className="font-bold text-white text-sm">{card.title}</h4>
+                        <p className="text-xs text-slate-400 mt-0.5">{card.subtitle}</p>
+                      </div>
+                    </div>
+                    {selectedPayment === card.id && <CheckCircle2 className="w-5 h-5 text-brand-500" />}
+                  </button>
+                ))}
+              </div>
+
+              {/* Cash on Delivery */}
+              <button 
+                onClick={() => { setSelectedPayment('cash'); setShowPaymentSelector(false); }}
+                className={`w-full flex items-center justify-between p-4 rounded-2xl border text-left transition-all ${
+                  selectedPayment === 'cash' ? 'border-brand-500 bg-brand-500/10' : 'border-slate-700 bg-slate-800 hover:bg-slate-700'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <Banknote className="w-5 h-5 text-emerald-500" />
+                  <div>
+                    <h4 className="font-bold text-white text-sm">Cash</h4>
+                    <p className="text-xs text-slate-400 mt-0.5">Pay directly to the driver</p>
+                  </div>
+                </div>
+                {selectedPayment === 'cash' && <CheckCircle2 className="w-5 h-5 text-brand-500" />}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Step 3: Confirming / Finding Driver */}
+      {step === 'confirming' && (
+        <div className="fixed inset-0 z-50 flex flex-col justify-end pointer-events-auto">
+          <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm"></div>
+          <div className="bg-slate-900 rounded-t-3xl shadow-[0_-10px_40px_rgba(0,0,0,0.5)] p-8 flex flex-col items-center justify-center h-[40vh] border-t border-slate-800 relative z-10">
+            <div className="relative w-20 h-20 mb-6">
+              <div className="absolute inset-0 border-4 border-slate-800 rounded-full"></div>
+              <div className="absolute inset-0 border-4 border-brand-500 rounded-full border-t-transparent animate-spin"></div>
+              <div className="absolute inset-0 flex items-center justify-center">
+                {selectedVehicle && getVehicleIcon('suv', "w-8 h-8 text-brand-400")}
+              </div>
+            </div>
+            <h2 className="text-2xl font-bold text-white mb-2 text-center">Connecting to {selectedVehicle?.provider.replace('_', ' ')}...</h2>
+            <p className="text-slate-400 text-center text-sm">Finding the nearest driver for your {selectedVehicle?.name}.</p>
+          </div>
+        </div>
+      )}
+
+      {/* Step 4: Driver Accepted & On Way */}
+      {(step === 'accepted' || step === 'on_way') && (
+        <div className="fixed inset-0 z-50 flex flex-col justify-end pointer-events-auto">
+          <div className="bg-slate-900 rounded-t-3xl shadow-[0_-10px_40px_rgba(0,0,0,0.5)] p-6 border-t border-slate-800 relative z-10">
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <h2 className="text-2xl font-bold text-white">Arriving in 15 mins</h2>
+                </div>
+                <p className="text-slate-400 flex items-center gap-2 text-sm">
+                  Your <ProviderBadge provider={selectedVehicle?.provider || 'chalo'} /> is on the way
+                </p>
+              </div>
+              <div className="bg-brand-500/10 text-brand-400 px-3 py-1 rounded-lg font-bold text-xl border border-brand-500/20">
+                OTP: 8821
+              </div>
+            </div>
+
+            <div className="flex items-center p-4 bg-slate-950 rounded-2xl mb-6 border border-slate-800">
+              <div className="w-12 h-12 bg-slate-800 rounded-full overflow-hidden mr-4">
+                <img src="https://picsum.photos/100/100?random=2" alt="Driver" className="w-full h-full object-cover" />
+              </div>
+              <div className="flex-1">
+                <h3 className="font-bold text-white">Suresh Patil</h3>
+                <div className="flex items-center text-sm text-slate-400">
+                  <span className="font-medium">4.9</span>
+                  <span className="text-yellow-400 ml-1">★</span>
+                  <span className="mx-2">•</span>
+                  <span className="font-mono bg-slate-800 px-1.5 rounded text-xs text-slate-200">KA 05 XY 9876</span>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <button className="w-10 h-10 bg-slate-800 rounded-full flex items-center justify-center shadow-sm border border-slate-700 text-brand-400">
+                  <ShieldCheck className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            <button onClick={() => { setStep('search'); onBack(); }} className="w-full py-4 bg-red-500/10 text-red-400 rounded-xl font-bold active:bg-red-500/20 transition-colors border border-red-500/20">
+              Cancel Ride
+            </button>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };
