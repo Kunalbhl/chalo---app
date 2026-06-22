@@ -1,8 +1,9 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { ArrowLeft, MapPin, Calendar, Users, Search, CheckCircle2, ShieldCheck, Loader2, X, Navigation, Briefcase, Plane, CreditCard, Smartphone, Wallet, Banknote, Sparkles } from 'lucide-react';
 import { ChaloLogo, getVehicleIcon } from '../components/Icons';
 import { ActivityItem, SavedMethod, WalletItem } from '../types';
 import { ProviderBadge } from '../components/ProviderBadge';
+import { RazorpayCheckout } from '../components/RazorpayCheckout';
 
 interface IntercityViewProps {
   onBack: () => void;
@@ -40,8 +41,8 @@ const MOCK_CITIES = [
 
 export const IntercityView: React.FC<IntercityViewProps> = ({ onBack, currentLocation, preferredPayment, upis, cards, wallets, walletBalance, onAddActivity }) => {
   const [step, setStep] = useState<'search' | 'verify_pickup' | 'results' | 'booking' | 'confirming' | 'accepted' | 'on_way'>('search');
-  const [fromCity, setFromCity] = useState('Bengaluru');
-  const [toCity, setToCity] = useState('Mysuru');
+  const [fromCity, setFromCity] = useState(currentLocation);
+  const [toCity, setToCity] = useState('');
   const [date, setDate] = useState('Tomorrow');
   const [passengers, setPassengers] = useState(4);
   const [luggage, setLuggage] = useState(2);
@@ -51,21 +52,97 @@ export const IntercityView: React.FC<IntercityViewProps> = ({ onBack, currentLoc
   
   const [showPaymentSelector, setShowPaymentSelector] = useState(false);
   const [selectedPayment, setSelectedPayment] = useState<string>(preferredPayment);
+  const [showRazorpay, setShowRazorpay] = useState(false);
 
   // Tracking state
   const [carPos, setCarPos] = useState({ top: '80%', left: '20%' });
 
-  // Mock Autocomplete
-  const [toCitySearchQuery, setToCitySearchQuery] = useState('');
-  const toCitySuggestions = useMemo(() => {
-    if (!toCitySearchQuery.trim()) return [];
-    return MOCK_CITIES.filter(city => city.toLowerCase().includes(toCitySearchQuery.toLowerCase()));
-  }, [toCitySearchQuery]);
+  // Map States
+  const mapRef = useRef<HTMLDivElement>(null);
+  const [map, setMap] = useState<google.maps.Map | null>(null);
+  const [directionsRenderer, setDirectionsRenderer] = useState<google.maps.DirectionsRenderer | null>(null);
+  const autocompleteInputRef = useRef<HTMLInputElement>(null);
+  const pickupInputRef = useRef<HTMLInputElement>(null);
+
+  // Initialize Google Map
+  useEffect(() => {
+    if (mapRef.current && !map && window.google) {
+      const newMap = new window.google.maps.Map(mapRef.current, {
+        center: { lat: 12.9716, lng: 77.5946 }, // Default Bengaluru
+        zoom: 13,
+        disableDefaultUI: true,
+      });
+      
+      const newDirectionsRenderer = new window.google.maps.DirectionsRenderer({
+        map: newMap,
+        suppressMarkers: false,
+      });
+
+      setMap(newMap);
+      setDirectionsRenderer(newDirectionsRenderer);
+    }
+  }, [mapRef.current]);
+
+  // Initialize Autocomplete for Dropoff
+  useEffect(() => {
+    if (step === 'search' && autocompleteInputRef.current && window.google) {
+      const autocomplete = new window.google.maps.places.Autocomplete(autocompleteInputRef.current, {
+        types: ['geocode', 'establishment'],
+        componentRestrictions: { country: 'in' }
+      });
+
+      autocomplete.addListener('place_changed', () => {
+        const place = autocomplete.getPlace();
+        if (place.formatted_address || place.name) {
+          const address = place.formatted_address || place.name || '';
+          setToCity(address);
+        }
+      });
+    }
+  }, [step]);
+
+  // Initialize Autocomplete for Pickup
+  useEffect(() => {
+    if (step === 'search' && pickupInputRef.current && window.google) {
+      const autocomplete = new window.google.maps.places.Autocomplete(pickupInputRef.current, {
+        types: ['geocode', 'establishment'],
+        componentRestrictions: { country: 'in' }
+      });
+
+      autocomplete.addListener('place_changed', () => {
+        const place = autocomplete.getPlace();
+        if (place.formatted_address || place.name) {
+          setFromCity(place.formatted_address || place.name || '');
+        }
+      });
+    }
+  }, [step]);
+
+  // Draw Route when pickup and dropoff are set
+  useEffect(() => {
+    if ((step === 'verify_pickup' || step === 'results') && fromCity && toCity && window.google && directionsRenderer) {
+      const directionsService = new window.google.maps.DirectionsService();
+      directionsService.route(
+        {
+          origin: fromCity,
+          destination: toCity,
+          travelMode: window.google.maps.TravelMode.DRIVING,
+        },
+        (result, status) => {
+          if (status === window.google.maps.DirectionsStatus.OK) {
+            directionsRenderer.setDirections(result);
+          } else {
+            console.error(`error fetching directions ${result}`);
+          }
+        }
+      );
+    }
+  }, [step, fromCity, toCity, directionsRenderer]);
 
   // Mock distance calculation based on cities
   const distance = useMemo(() => {
-    if (fromCity === 'Bengaluru' && toCity === 'Chennai') return 350;
-    if (fromCity === 'Bengaluru' && toCity === 'Hyderabad') return 570;
+    if (fromCity.includes('Bengaluru') && toCity.includes('Chennai')) return 350;
+    if (fromCity.includes('Bengaluru') && toCity.includes('Hyderabad')) return 570;
     return 145; // Default Mysuru
   }, [fromCity, toCity]);
 
@@ -117,11 +194,6 @@ export const IntercityView: React.FC<IntercityViewProps> = ({ onBack, currentLoc
     }
   }, [step]);
 
-  const handleCitySelect = (city: string) => {
-    setToCity(city);
-    setToCitySearchQuery('');
-  };
-
   const handleSearch = () => {
     setIsSearching(true);
     setTimeout(() => {
@@ -139,13 +211,22 @@ export const IntercityView: React.FC<IntercityViewProps> = ({ onBack, currentLoc
     setStep('booking');
   };
 
-  const confirmBooking = () => {
+  const handleConfirmBooking = () => {
+    if (selectedPayment !== 'cash') {
+      setShowRazorpay(true);
+    } else {
+      processBooking();
+    }
+  };
+
+  const processBooking = () => {
+    setShowRazorpay(false);
     setStep('confirming');
     onAddActivity({
       id: `act-${Date.now()}`,
       provider: selectedVehicle?.provider || 'chalo',
       type: 'intercity',
-      title: `Intercity to ${toCity}`,
+      title: `Intercity to ${toCity.split(',')[0]}`,
       date: 'Just Now',
       status: 'ongoing',
       price: (selectedVehicle?.baseFare || 0) + ((selectedVehicle?.pricePerKm || 0) * distance)
@@ -154,6 +235,14 @@ export const IntercityView: React.FC<IntercityViewProps> = ({ onBack, currentLoc
 
   return (
     <div className="min-h-screen bg-brand-950 flex flex-col font-sans text-slate-100 relative overflow-hidden">
+      {showRazorpay && selectedVehicle && (
+        <RazorpayCheckout 
+          amount={(selectedVehicle.baseFare || 0) + ((selectedVehicle.pricePerKm || 0) * distance)} 
+          onSuccess={processBooking} 
+          onCancel={() => setShowRazorpay(false)} 
+        />
+      )}
+
       {/* Header */}
       <div className="bg-slate-900/90 pt-12 pb-4 px-4 shadow-sm sticky top-0 z-20 border-b border-slate-800/50 backdrop-blur-md">
         <div className="flex items-center gap-3">
@@ -167,18 +256,9 @@ export const IntercityView: React.FC<IntercityViewProps> = ({ onBack, currentLoc
         </div>
       </div>
 
-      {/* Map Background (OSM Iframe) */}
+      {/* Map Background */}
       <div className="absolute inset-0 z-0 bg-slate-100">
-        <iframe 
-          width="100%" 
-          height="100%" 
-          frameBorder="0" 
-          scrolling="no" 
-          marginHeight={0} 
-          marginWidth={0} 
-          src={`https://www.openstreetmap.org/export/embed.html?bbox=76.5,12.0,78.0,13.5&layer=mapnik`}
-          className="absolute inset-0 opacity-70"
-        ></iframe>
+        <div ref={mapRef} className="absolute inset-0"></div>
         <div className="absolute inset-0 bg-slate-950/40 pointer-events-none"></div>
 
         {/* Simulated Tracking Car */}
@@ -203,38 +283,24 @@ export const IntercityView: React.FC<IntercityViewProps> = ({ onBack, currentLoc
                 <div className="absolute -left-8 top-3 w-2 h-2 rounded-full bg-blue-500 ring-4 ring-blue-900"></div>
                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Pickup City</p>
                 <input 
+                  ref={pickupInputRef}
                   type="text" 
                   value={fromCity}
                   onChange={(e) => setFromCity(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-white focus:ring-2 focus:ring-brand-500 outline-none font-bold"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-white focus:ring-2 focus:ring-brand-500 outline-none font-bold text-sm"
                 />
               </div>
               <div className="relative">
                 <div className="absolute -left-8 top-3 w-2 h-2 rounded-sm bg-brand-500 ring-4 ring-brand-900"></div>
                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Drop City</p>
                 <input 
+                  ref={autocompleteInputRef}
                   type="text" 
-                  value={toCitySearchQuery || toCity}
-                  onChange={(e) => {
-                    setToCitySearchQuery(e.target.value);
-                    setToCity(e.target.value);
-                  }}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-white focus:ring-2 focus:ring-brand-500 outline-none font-bold"
+                  value={toCity}
+                  onChange={(e) => setToCity(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-white focus:ring-2 focus:ring-brand-500 outline-none font-bold text-sm"
+                  placeholder="Where to?"
                 />
-                {/* Autocomplete Suggestions */}
-                {toCitySuggestions.length > 0 && (
-                  <div className="absolute top-full left-0 right-0 mt-2 bg-slate-800 border border-slate-700 rounded-xl shadow-lg z-30 overflow-hidden">
-                    {toCitySuggestions.map((city, idx) => (
-                      <button
-                        key={idx}
-                        onClick={() => handleCitySelect(city)}
-                        className="w-full text-left px-4 py-3 hover:bg-slate-700 border-b border-slate-700/50 last:border-0 text-sm font-medium text-slate-200 flex items-center gap-2"
-                      >
-                        <MapPin className="w-4 h-4 text-slate-400" /> {city}
-                      </button>
-                    ))}
-                  </div>
-                )}
               </div>
             </div>
 
@@ -269,8 +335,8 @@ export const IntercityView: React.FC<IntercityViewProps> = ({ onBack, currentLoc
 
             <button 
               onClick={handleSearch}
-              disabled={isSearching}
-              className="w-full py-4 mt-2 bg-brand-600 hover:bg-brand-700 text-white rounded-2xl font-bold text-base shadow-md transition-colors flex items-center justify-center gap-2"
+              disabled={isSearching || !toCity}
+              className="w-full py-4 mt-2 bg-brand-600 hover:bg-brand-700 text-white rounded-2xl font-bold text-base shadow-md transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
             >
               {isSearching ? <Loader2 className="w-5 h-5 animate-spin" /> : <Search className="w-5 h-5" />}
               {isSearching ? 'Finding Cabs...' : 'Search Cabs'}
@@ -287,7 +353,7 @@ export const IntercityView: React.FC<IntercityViewProps> = ({ onBack, currentLoc
               </div>
               <div>
                 <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">Pickup Location</p>
-                <p className="font-bold text-white text-sm truncate max-w-[280px]">{currentLocation}</p>
+                <p className="font-bold text-white text-sm truncate max-w-[280px]">{fromCity}</p>
               </div>
             </div>
             <button 
@@ -303,7 +369,7 @@ export const IntercityView: React.FC<IntercityViewProps> = ({ onBack, currentLoc
           <div className="space-y-4 animate-[fadeIn_0.2s_ease-out] pointer-events-auto">
             <div className="bg-slate-900/95 backdrop-blur-md rounded-2xl p-4 border border-slate-800 shadow-sm flex items-center justify-between">
               <div>
-                <h3 className="font-bold text-white text-sm">{fromCity} to {toCity}</h3>
+                <h3 className="font-bold text-white text-sm">{fromCity.split(',')[0]} to {toCity.split(',')[0]}</h3>
                 <p className="text-xs text-slate-400 mt-0.5">{date} • {passengers} Pax • {luggage} Bags • ~{distance} km</p>
               </div>
               <button onClick={() => setStep('search')} className="text-brand-400 text-xs font-bold bg-brand-500/10 px-3 py-1.5 rounded-lg border border-brand-500/20">Modify</button>
@@ -322,7 +388,7 @@ export const IntercityView: React.FC<IntercityViewProps> = ({ onBack, currentLoc
                       <Plane className="w-8 h-8 text-slate-300" />
                     </div>
                     <div className="flex-1">
-                      <h4 className="font-bold text-white">Flight to {toCity}</h4>
+                      <h4 className="font-bold text-white">Flight to {toCity.split(',')[0]}</h4>
                       <p className="text-xs text-slate-400">{flightAlternative.airline} • {flightAlternative.duration}</p>
                       <p className="font-extrabold text-sky-400 mt-1">₹{flightAlternative.price} total</p>
                     </div>
@@ -378,13 +444,12 @@ export const IntercityView: React.FC<IntercityViewProps> = ({ onBack, currentLoc
       {/* Booking Modal */}
       {step === 'booking' && selectedVehicle && (
         <div className="fixed inset-0 z-50 flex flex-col justify-end pointer-events-auto">
-          <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm" onClick={() => !isProcessing && setStep('results')}></div>
-          <div className="bg-slate-900 rounded-t-[2.5rem] p-6 relative z-10 border-t border-slate-800 max-h-[92vh] w-full overflow-y-auto hide-scrollbar animate-[slideUp_0.3s_ease-out] text-slate-100 pb-8">
+          <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm" onClick={() => setStep('results')}></div>
+          <div className="bg-slate-900 rounded-t-[2.5rem] p-6 relative z-10 border-t border-slate-800 max-h-[92vh] w-full overflow-y-auto hide-scrollbar animate-[slideUp_0.3s_ease-out] text-slate-100 pb-12">
             <div className="w-12 h-1.5 bg-slate-700 rounded-full mx-auto mb-4 cursor-grab"></div>
             <button 
               onClick={() => setStep('results')}
               className="absolute top-4 right-4 p-2 bg-slate-800 rounded-full text-slate-400 hover:text-white transition-colors"
-              disabled={isProcessing}
             >
               <X className="w-5 h-5" />
             </button>
@@ -407,7 +472,7 @@ export const IntercityView: React.FC<IntercityViewProps> = ({ onBack, currentLoc
               </div>
               <div className="pt-3 border-t border-slate-800/60 flex justify-between items-center">
                 <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Route</span>
-                <span className="font-bold text-slate-200">{fromCity} → {toCity}</span>
+                <span className="font-bold text-slate-200">{fromCity.split(',')[0]} → {toCity.split(',')[0]}</span>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Distance</span>
@@ -432,7 +497,7 @@ export const IntercityView: React.FC<IntercityViewProps> = ({ onBack, currentLoc
             </div>
 
             <button 
-              onClick={confirmBooking}
+              onClick={handleConfirmBooking}
               className="w-full py-4 bg-brand-600 hover:bg-brand-700 text-white rounded-xl font-bold text-lg shadow-md transition-colors"
             >
               Confirm & Pay
@@ -448,7 +513,7 @@ export const IntercityView: React.FC<IntercityViewProps> = ({ onBack, currentLoc
       {showPaymentSelector && (
         <div className="fixed inset-0 z-50 flex flex-col justify-end pointer-events-auto">
           <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm" onClick={() => setShowPaymentSelector(false)}></div>
-          <div className="bg-slate-900 rounded-t-[2rem] p-6 relative z-10 border-t border-slate-800 max-h-[90vh] w-full overflow-y-auto hide-scrollbar animate-[slideUp_0.3s_ease-out] text-slate-100 pb-8">
+          <div className="bg-slate-900 rounded-t-[2rem] p-6 relative z-10 border-t border-slate-800 max-h-[90vh] w-full overflow-y-auto hide-scrollbar animate-[slideUp_0.3s_ease-out] text-slate-100 pb-12">
             <div className="w-12 h-1.5 bg-slate-700 rounded-full mx-auto mb-4 cursor-grab"></div>
             <button 
               onClick={() => setShowPaymentSelector(false)}
