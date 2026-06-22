@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
-import { ArrowLeft, CheckCircle2, X, ShieldCheck, Smartphone, Lock, Mail } from 'lucide-react';
-import { AnyProvider } from '../types';
+import { ArrowLeft, CheckCircle2, X, ShieldCheck, Smartphone, Lock, Mail, Calendar } from 'lucide-react';
+import { AnyProvider, LinkedAccount } from '../types';
 
 interface LinkedAccountsViewProps {
   onBack: () => void;
+  linkedAccounts: LinkedAccount[];
+  setLinkedAccounts: React.Dispatch<React.SetStateAction<LinkedAccount[]>>;
 }
 
 interface ProviderConfig {
@@ -41,25 +43,21 @@ const PROVIDERS: ProviderConfig[] = [
   
   // Travel
   { id: 'irctc', name: 'IRCTC', category: 'Travel', color: 'bg-blue-800', textColor: 'text-white', domain: 'irctc.co.in' },
-  { id: 'makemytrip', name: 'MakeMyTrip', category: 'Travel', color: 'bg-red-500', textColor: 'text-white', domain: 'makemytrip.com' },
-  { id: 'cleartrip', name: 'Cleartrip', category: 'Travel', color: 'bg-green-500', textColor: 'text-white', domain: 'cleartrip.com' },
   { id: 'ixigo', name: 'Ixigo', category: 'Travel', color: 'bg-orange-600', textColor: 'text-white', domain: 'ixigo.com' },
   { id: 'skyscanner', name: 'Skyscanner', category: 'Travel', color: 'bg-sky-500', textColor: 'text-white', domain: 'skyscanner.co.in' },
   { id: 'kayak', name: 'KAYAK', category: 'Travel', color: 'bg-orange-400', textColor: 'text-white', domain: 'kayak.co.in' },
 ];
 
-export const LinkedAccountsView: React.FC<LinkedAccountsViewProps> = ({ onBack }) => {
-  const [connected, setConnected] = useState<Set<string>>(new Set(['uber', 'zomato']));
+export const LinkedAccountsView: React.FC<LinkedAccountsViewProps> = ({ onBack, linkedAccounts, setLinkedAccounts }) => {
   const [linkingProvider, setLinkingProvider] = useState<ProviderConfig | null>(null);
   const [loginStep, setLoginStep] = useState<'intro' | 'form' | 'loading'>('intro');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
 
   const handleLinkClick = (provider: ProviderConfig) => {
-    if (connected.has(provider.id)) {
-      const newConnected = new Set(connected);
-      newConnected.delete(provider.id);
-      setConnected(newConnected);
+    const existing = linkedAccounts.find(acc => acc.providerId === provider.id);
+    if (existing) {
+      setLinkedAccounts(prev => prev.filter(acc => acc.providerId !== provider.id));
     } else {
       setLinkingProvider(provider);
       setLoginStep('intro');
@@ -73,9 +71,13 @@ export const LinkedAccountsView: React.FC<LinkedAccountsViewProps> = ({ onBack }
     setLoginStep('loading');
     setTimeout(() => {
       if (linkingProvider) {
-        const newConnected = new Set(connected);
-        newConnected.add(linkingProvider.id);
-        setConnected(newConnected);
+        const newAccount: LinkedAccount = {
+          id: `la-${Date.now()}`,
+          providerId: linkingProvider.id,
+          linkedSince: new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }),
+          username: email
+        };
+        setLinkedAccounts(prev => [...prev, newAccount]);
       }
       setLinkingProvider(null);
     }, 2000);
@@ -115,7 +117,8 @@ export const LinkedAccountsView: React.FC<LinkedAccountsViewProps> = ({ onBack }
             <h2 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-3 ml-1">{category}</h2>
             <div className="bg-slate-900/80 rounded-3xl shadow-soft border border-slate-800/80 overflow-hidden">
               {providers.map((provider, index) => {
-                const isConnected = connected.has(provider.id);
+                const linkedAcc = linkedAccounts.find(acc => acc.providerId === provider.id);
+                const isConnected = !!linkedAcc;
                 return (
                   <div key={provider.id} className={`flex items-center p-4 ${index !== providers.length - 1 ? 'border-b border-slate-800/50' : ''}`}>
                     <div className={`w-12 h-12 rounded-2xl flex items-center justify-center font-bold text-lg shadow-sm overflow-hidden bg-white border border-slate-800`}>
@@ -133,9 +136,14 @@ export const LinkedAccountsView: React.FC<LinkedAccountsViewProps> = ({ onBack }
                     <div className="flex-1 ml-4">
                       <h3 className="font-bold text-white">{provider.name}</h3>
                       {isConnected ? (
-                        <p className="text-xs font-medium text-emerald-400 flex items-center mt-0.5">
-                          <CheckCircle2 className="w-3.5 h-3.5 mr-1" /> Connected
-                        </p>
+                        <div>
+                          <p className="text-xs font-medium text-emerald-400 flex items-center mt-0.5">
+                            <CheckCircle2 className="w-3.5 h-3.5 mr-1" /> Connected
+                          </p>
+                          <p className="text-[10px] text-slate-500 mt-1 flex items-center gap-1">
+                            <Calendar className="w-3 h-3" /> Linked since {linkedAcc.linkedSince}
+                          </p>
+                        </div>
                       ) : (
                         <p className="text-xs font-medium text-slate-500 mt-0.5">Not connected</p>
                       )}
@@ -162,7 +170,7 @@ export const LinkedAccountsView: React.FC<LinkedAccountsViewProps> = ({ onBack }
       {linkingProvider && (
         <div className="absolute inset-0 z-50 flex flex-col justify-end">
           <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm" onClick={() => loginStep !== 'loading' && setLinkingProvider(null)}></div>
-          <div className="bg-slate-900 rounded-t-[2rem] p-6 relative z-10 border-t border-slate-800 animate-[slideUp_0.3s_ease-out]">
+          <div className="bg-slate-900 rounded-t-[2rem] p-6 relative z-10 border-t border-slate-800 animate-[slideUp_0.3s_ease-out] pb-12">
             <button 
               onClick={() => loginStep !== 'loading' && setLinkingProvider(null)}
               className="absolute top-4 right-4 p-2 bg-slate-800 rounded-full text-slate-400 hover:text-white"
