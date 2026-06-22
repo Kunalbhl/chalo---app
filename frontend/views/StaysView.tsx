@@ -4,6 +4,7 @@ import { STAYS } from '../constants';
 import { ProviderBadge } from '../components/ProviderBadge';
 import { StayType, Stay, ActivityItem, Guest } from '../types';
 import { ChaloLogo } from '../components/Icons';
+import { RazorpayCheckout } from '../components/RazorpayCheckout';
 
 interface StaysViewProps {
   onBack: () => void;
@@ -34,6 +35,7 @@ export const StaysView: React.FC<StaysViewProps> = ({ onBack, onAddActivity, sav
   const [bookingStep, setBookingStep] = useState<'details' | 'payment' | 'success'>('details');
   const [isProcessing, setIsProcessing] = useState(false);
   const [bookingSuccess, setBookingSuccess] = useState(false);
+  const [showRazorpay, setShowRazorpay] = useState(false);
   
   // Guest Details
   const [guestName, setGuestName] = useState('');
@@ -98,7 +100,12 @@ export const StaysView: React.FC<StaysViewProps> = ({ onBack, onAddActivity, sav
     setBookingStep('payment');
   };
 
-  const confirmBooking = () => {
+  const handleConfirmBooking = () => {
+    setShowRazorpay(true);
+  };
+
+  const processBooking = () => {
+    setShowRazorpay(false);
     setIsProcessing(true);
     setTimeout(() => {
       setIsProcessing(false);
@@ -126,6 +133,14 @@ export const StaysView: React.FC<StaysViewProps> = ({ onBack, onAddActivity, sav
 
   return (
     <div className="min-h-screen bg-white flex flex-col font-sans text-slate-800 relative">
+      {showRazorpay && selectedStay && (
+        <RazorpayCheckout 
+          amount={selectedStay.price} 
+          onSuccess={processBooking} 
+          onCancel={() => setShowRazorpay(false)} 
+        />
+      )}
+
       {/* Premium Dark Header with Light Grey Search Bar */}
       <div className="bg-slate-950 pt-12 pb-4 px-4 shadow-sm sticky top-0 z-20 border-b border-slate-900 backdrop-blur-md">
         <div className="flex items-center justify-between mb-4">
@@ -254,7 +269,7 @@ export const StaysView: React.FC<StaysViewProps> = ({ onBack, onAddActivity, sav
               </div>
               <div>
                 <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Guests</p>
-                <p className="font-semibold text-white text-sm">2 Adults, 1 Room</p>
+                <p className="font-semibold text-slate-800 text-sm">2 Adults, 1 Room</p>
               </div>
             </div>
           </div>
@@ -522,7 +537,7 @@ export const StaysView: React.FC<StaysViewProps> = ({ onBack, onAddActivity, sav
                   </div>
                 ) : (
                   <button 
-                    onClick={confirmBooking}
+                    onClick={handleConfirmBooking}
                     className="w-full py-4 bg-brand-600 hover:bg-brand-700 text-white rounded-xl font-bold text-lg shadow-md transition-colors"
                   >
                     Pay ₹{selectedStay.price}
