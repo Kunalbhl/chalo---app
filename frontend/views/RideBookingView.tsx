@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { ArrowLeft, MapPin, Navigation, Clock, User, ShieldCheck, CreditCard, Smartphone, Wallet, Banknote, CheckCircle2, X, Loader2, ChevronRight } from 'lucide-react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { ArrowLeft, MapPin, Navigation, Clock, User, ShieldCheck, CreditCard, Smartphone, Wallet, Banknote, CheckCircle2, X, Loader2, ChevronRight, Search } from 'lucide-react';
 import { BookingStep, Location, VehicleOption, SavedMethod, WalletItem, ActivityItem } from '../types';
 import { RECENT_LOCATIONS, VEHICLES } from '../constants';
 import { getVehicleIcon } from '../components/Icons';
 import { ProviderBadge } from '../components/ProviderBadge';
+import { RazorpayCheckout } from '../components/RazorpayCheckout';
 
 interface RideBookingViewProps {
   onBack: () => void;
@@ -36,16 +37,93 @@ export const RideBookingView: React.FC<RideBookingViewProps> = ({ onBack, curren
   
   const [showPaymentSelector, setShowPaymentSelector] = useState(false);
   const [selectedPayment, setSelectedPayment] = useState<string>(preferredPayment);
+  const [showRazorpay, setShowRazorpay] = useState(false);
   
   // Tracking state
   const [carPos, setCarPos] = useState({ top: '80%', left: '20%' });
 
-  // Mock Autocomplete
-  const [dropoffSearchQuery, setDropoffSearchQuery] = useState('');
-  const dropoffSuggestions = useMemo(() => {
-    if (!dropoffSearchQuery.trim()) return [];
-    return MOCK_PLACES.filter(place => place.toLowerCase().includes(dropoffSearchQuery.toLowerCase()));
-  }, [dropoffSearchQuery]);
+  // Map States
+  const mapRef = useRef<HTMLDivElement>(null);
+  const [map, setMap] = useState<google.maps.Map | null>(null);
+  const [directionsRenderer, setDirectionsRenderer] = useState<google.maps.DirectionsRenderer | null>(null);
+  const autocompleteInputRef = useRef<HTMLInputElement>(null);
+  const pickupInputRef = useRef<HTMLInputElement>(null);
+
+  // Initialize Google Map
+  useEffect(() => {
+    if (mapRef.current && !map && window.google) {
+      const newMap = new window.google.maps.Map(mapRef.current, {
+        center: { lat: 12.9716, lng: 77.5946 }, // Default Bengaluru
+        zoom: 13,
+        disableDefaultUI: true,
+      });
+      
+      const newDirectionsRenderer = new window.google.maps.DirectionsRenderer({
+        map: newMap,
+        suppressMarkers: false,
+      });
+
+      setMap(newMap);
+      setDirectionsRenderer(newDirectionsRenderer);
+    }
+  }, [mapRef.current]);
+
+  // Initialize Autocomplete for Dropoff
+  useEffect(() => {
+    if (step === 'search' && autocompleteInputRef.current && window.google) {
+      const autocomplete = new window.google.maps.places.Autocomplete(autocompleteInputRef.current, {
+        types: ['geocode', 'establishment'],
+        componentRestrictions: { country: 'in' }
+      });
+
+      autocomplete.addListener('place_changed', () => {
+        const place = autocomplete.getPlace();
+        if (place.formatted_address || place.name) {
+          const address = place.formatted_address || place.name || '';
+          setDropoff(address);
+          handleLocationSelect(address);
+        }
+      });
+    }
+  }, [step]);
+
+  // Initialize Autocomplete for Pickup
+  useEffect(() => {
+    if (step === 'search' && pickupInputRef.current && window.google) {
+      const autocomplete = new window.google.maps.places.Autocomplete(pickupInputRef.current, {
+        types: ['geocode', 'establishment'],
+        componentRestrictions: { country: 'in' }
+      });
+
+      autocomplete.addListener('place_changed', () => {
+        const place = autocomplete.getPlace();
+        if (place.formatted_address || place.name) {
+          setPickup(place.formatted_address || place.name || '');
+        }
+      });
+    }
+  }, [step]);
+
+  // Draw Route when pickup and dropoff are set
+  useEffect(() => {
+    if ((step === 'verify_pickup' || step === 'select_vehicle') && pickup && dropoff && window.google && directionsRenderer) {
+      const directionsService = new window.google.maps.DirectionsService();
+      directionsService.route(
+        {
+          origin: pickup,
+          destination: dropoff,
+          travelMode: window.google.maps.TravelMode.DRIVING,
+        },
+        (result, status) => {
+          if (status === window.google.maps.DirectionsStatus.OK) {
+            directionsRenderer.setDirections(result);
+          } else {
+            console.error(`error fetching directions ${result}`);
+          }
+        }
+      );
+    }
+  }, [step, pickup, dropoff, directionsRenderer]);
 
   // Simulate finding a driver and tracking
   useEffect(() => {
@@ -76,7 +154,6 @@ export const RideBookingView: React.FC<RideBookingViewProps> = ({ onBack, curren
 
   const handleLocationSelect = (locName: string) => {
     setDropoff(locName);
-    setDropoffSearchQuery('');
     setStep('verify_pickup');
   };
 
@@ -86,17 +163,26 @@ export const RideBookingView: React.FC<RideBookingViewProps> = ({ onBack, curren
 
   const handleBook = () => {
     if (selectedVehicle) {
-      setStep('confirming');
-      onAddActivity({
-        id: `act-${Date.now()}`,
-        provider: selectedVehicle.provider,
-        type: 'ride',
-        title: `${selectedVehicle.name} to ${dropoff.split(',')[0]}`,
-        date: 'Just Now',
-        status: 'ongoing',
-        price: selectedVehicle.price
-      });
+      if (selectedPayment !== 'cash') {
+        setShowRazorpay(true);
+      } else {
+        processBooking();
+      }
     }
+  };
+
+  const processBooking = () => {
+    setShowRazorpay(false);
+    setStep('confirming');
+    onAddActivity({
+      id: `act-${Date.now()}`,
+      provider: selectedVehicle!.provider,
+      type: 'ride',
+      title: `${selectedVehicle!.name} to ${dropoff.split(',')[0]}`,
+      date: 'Just Now',
+      status: 'ongoing',
+      price: selectedVehicle!.price
+    });
   };
 
   const sortedAndFilteredVehicles = useMemo(() => {
@@ -113,6 +199,14 @@ export const RideBookingView: React.FC<RideBookingViewProps> = ({ onBack, curren
 
   return (
     <div className="h-screen flex flex-col bg-brand-950 relative overflow-hidden text-slate-100">
+      {showRazorpay && selectedVehicle && (
+        <RazorpayCheckout 
+          amount={selectedVehicle.price} 
+          onSuccess={processBooking} 
+          onCancel={() => setShowRazorpay(false)} 
+        />
+      )}
+
       {/* Header */}
       <div className="absolute top-0 left-0 right-0 z-20 bg-slate-900/90 backdrop-blur-md pt-12 pb-4 px-4 flex items-center shadow-sm border-b border-slate-800/50">
         <button onClick={step === 'search' ? onBack : () => setStep('search')} className="p-2 -ml-2 rounded-full hover:bg-slate-800 active:bg-slate-700 transition-colors">
@@ -125,18 +219,9 @@ export const RideBookingView: React.FC<RideBookingViewProps> = ({ onBack, curren
         </h1>
       </div>
 
-      {/* Map Background (OSM Iframe) */}
+      {/* Map Background */}
       <div className="absolute inset-0 z-0 bg-slate-100">
-        <iframe 
-          width="100%" 
-          height="100%" 
-          frameBorder="0" 
-          scrolling="no" 
-          marginHeight={0} 
-          marginWidth={0} 
-          src={`https://www.openstreetmap.org/export/embed.html?bbox=77.58,12.96,77.61,12.98&layer=mapnik`}
-          className="absolute inset-0 opacity-70"
-        ></iframe>
+        <div ref={mapRef} className="absolute inset-0"></div>
         
         {/* Overlay to darken map slightly for better contrast with dark UI */}
         <div className="absolute inset-0 bg-slate-950/40 pointer-events-none"></div>
@@ -169,6 +254,7 @@ export const RideBookingView: React.FC<RideBookingViewProps> = ({ onBack, curren
                 <div className="mb-4 relative">
                   <div className="absolute -left-8 top-3 w-2 h-2 rounded-full bg-blue-500 ring-4 ring-blue-950"></div>
                   <input 
+                    ref={pickupInputRef}
                     type="text" 
                     value={pickup}
                     onChange={(e) => setPickup(e.target.value)}
@@ -179,33 +265,19 @@ export const RideBookingView: React.FC<RideBookingViewProps> = ({ onBack, curren
                 <div className="relative">
                   <div className="absolute -left-8 top-3 w-2 h-2 rounded-sm bg-brand-500 ring-4 ring-brand-950"></div>
                   <input 
+                    ref={autocompleteInputRef}
                     type="text" 
-                    value={dropoffSearchQuery}
-                    onChange={(e) => setDropoffSearchQuery(e.target.value)}
+                    value={dropoff}
+                    onChange={(e) => setDropoff(e.target.value)}
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-white focus:ring-2 focus:ring-brand-500 outline-none text-sm"
                     placeholder="Where to?"
                     autoFocus
                   />
-                  
-                  {/* Autocomplete Suggestions */}
-                  {dropoffSuggestions.length > 0 && (
-                    <div className="absolute top-full left-0 right-0 mt-2 bg-slate-800 border border-slate-700 rounded-xl shadow-lg z-30 overflow-hidden">
-                      {dropoffSuggestions.map((place, idx) => (
-                        <button
-                          key={idx}
-                          onClick={() => handleLocationSelect(place)}
-                          className="w-full text-left px-4 py-3 hover:bg-slate-700 border-b border-slate-700/50 last:border-0 text-sm font-medium text-slate-200 flex items-center gap-2"
-                        >
-                          <MapPin className="w-4 h-4 text-slate-400" /> {place}
-                        </button>
-                      ))}
-                    </div>
-                  )}
                 </div>
               </div>
 
               {/* Recent Locations */}
-              {!dropoffSearchQuery && (
+              {!dropoff && (
                 <div>
                   <h3 className="text-xs font-bold text-slate-500 mb-3 uppercase tracking-wider">Recent</h3>
                   <div className="space-y-0">
@@ -417,7 +489,7 @@ export const RideBookingView: React.FC<RideBookingViewProps> = ({ onBack, curren
       {showPaymentSelector && (
         <div className="fixed inset-0 z-50 flex flex-col justify-end pointer-events-auto">
           <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm" onClick={() => setShowPaymentSelector(false)}></div>
-          <div className="bg-slate-900 rounded-t-[2rem] p-6 relative z-10 border-t border-slate-800 max-h-[90vh] w-full overflow-y-auto hide-scrollbar animate-[slideUp_0.3s_ease-out] text-slate-100 pb-8">
+          <div className="bg-slate-900 rounded-t-[2rem] p-6 relative z-10 border-t border-slate-800 max-h-[90vh] w-full overflow-y-auto hide-scrollbar animate-[slideUp_0.3s_ease-out] text-slate-100 pb-12">
             <div className="w-12 h-1.5 bg-slate-700 rounded-full mx-auto mb-4 cursor-grab"></div>
             <button 
               onClick={() => setShowPaymentSelector(false)}
