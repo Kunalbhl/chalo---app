@@ -3,6 +3,7 @@ import { ArrowLeft, Search, Calendar, Users, Plane, X, ArrowUpDown, Loader2, Che
 import { ChaloLogo } from '../components/Icons';
 import { ProviderBadge } from '../components/ProviderBadge';
 import { TravelProvider, ActivityItem, Guest } from '../types';
+import { RazorpayCheckout } from '../components/RazorpayCheckout';
 
 interface FlightsViewProps {
   onBack: () => void;
@@ -50,6 +51,7 @@ export const FlightsView: React.FC<FlightsViewProps> = ({ onBack, onAddActivity,
   const [bookingStep, setBookingStep] = useState<'details' | 'guest' | 'payment' | 'success'>('details');
   const [isProcessing, setIsProcessing] = useState(false);
   const [bookingSuccess, setBookingSuccess] = useState(false);
+  const [showRazorpay, setShowRazorpay] = useState(false);
   
   // Guest Details (Multiple Passengers)
   const [passengerDetails, setPassengerDetails] = useState<Guest[]>([
@@ -144,7 +146,12 @@ export const FlightsView: React.FC<FlightsViewProps> = ({ onBack, onAddActivity,
     setBookingStep('payment');
   };
 
-  const confirmBooking = () => {
+  const handleConfirmBooking = () => {
+    setShowRazorpay(true);
+  };
+
+  const processBooking = () => {
+    setShowRazorpay(false);
     setIsProcessing(true);
     setTimeout(() => {
       setIsProcessing(false);
@@ -175,6 +182,14 @@ export const FlightsView: React.FC<FlightsViewProps> = ({ onBack, onAddActivity,
 
   return (
     <div className="min-h-screen bg-white flex flex-col font-sans text-slate-800 relative">
+      {showRazorpay && selectedFlight && (
+        <RazorpayCheckout 
+          amount={selectedFlight.price * passengers} 
+          onSuccess={processBooking} 
+          onCancel={() => setShowRazorpay(false)} 
+        />
+      )}
+
       {/* Header */}
       <div className="bg-slate-950 pt-12 pb-4 px-4 shadow-sm sticky top-0 z-20 border-b border-slate-900 backdrop-blur-md">
         <div className="flex items-center gap-3">
@@ -603,7 +618,7 @@ export const FlightsView: React.FC<FlightsViewProps> = ({ onBack, onAddActivity,
                   </div>
                 ) : (
                   <button 
-                    onClick={confirmBooking}
+                    onClick={handleConfirmBooking}
                     className="w-full py-4 bg-brand-600 hover:bg-brand-700 text-white rounded-xl font-bold text-lg shadow-md transition-colors"
                   >
                     Pay ₹{selectedFlight.price * passengers}
