@@ -11,6 +11,7 @@ interface HomeViewProps {
   onAddRewards: (points: number, description?: string) => void;
   onAddWalletMoney: (amount: number) => void;
   profileName: string;
+  profilePic: string;
   rewardTransactions: RewardTransaction[];
   currentLocation: string;
   onUpdateLocation: (loc: string) => void;
@@ -85,7 +86,7 @@ const PINCODE_MAP: Record<string, { city: string, state: string }> = {
   '110001': { city: 'New Delhi', state: 'Delhi' },
 };
 
-export const HomeView: React.FC<HomeViewProps> = ({ onChangeView, walletBalance, rewardPoints, onAddRewards, onAddWalletMoney, profileName, rewardTransactions, currentLocation, onUpdateLocation, onAddSavedAddress, savedAddresses, onEditProfile }) => {
+export const HomeView: React.FC<HomeViewProps> = ({ onChangeView, walletBalance, rewardPoints, onAddRewards, onAddWalletMoney, profileName, profilePic, rewardTransactions, currentLocation, onUpdateLocation, onAddSavedAddress, savedAddresses, onEditProfile }) => {
   const [activeGlow, setActiveGlow] = useState<'none' | 'ride' | 'food' | 'mart' | 'stays'>('none');
   const [copied, setCopied] = useState(false);
   const [showReferralModal, setShowReferralModal] = useState(false);
@@ -283,6 +284,9 @@ export const HomeView: React.FC<HomeViewProps> = ({ onChangeView, walletBalance,
               setFetchedAddressText('Location found, address unavailable');
             }
             setIsFetchingLocation(false);
+            
+            // Auto-close modal after fetching
+            setTimeout(() => setShowLocationModal(false), 800);
           });
         },
         (error) => {
@@ -465,17 +469,26 @@ export const HomeView: React.FC<HomeViewProps> = ({ onChangeView, walletBalance,
         <div className="flex justify-between items-end mb-4 text-white gap-4">
           <button 
             onClick={onEditProfile}
-            className="flex-1 min-w-0 text-left hover:opacity-80 transition-opacity group"
+            className="flex-1 min-w-0 text-left hover:opacity-80 transition-opacity group flex items-center gap-3"
           >
-            <p className="text-slate-400 text-xs font-medium">{greeting},</p>
-            <h2 className="text-xl font-extrabold tracking-tight text-white mt-0.5 truncate flex items-center gap-1 group-hover:text-indigo-300 transition-colors">
-              {profileName} <Edit2 className="w-3.5 h-3.5 text-slate-500 group-hover:text-indigo-300 transition-colors ml-1" />
-            </h2>
+            {profilePic ? (
+              <img src={profilePic} alt="Profile" className="w-10 h-10 rounded-full object-cover border-2 border-slate-800" />
+            ) : (
+              <div className="w-10 h-10 rounded-full bg-brand-600 flex items-center justify-center font-bold text-white border-2 border-slate-800">
+                {profileName.charAt(0)}
+              </div>
+            )}
+            <div className="flex-1 min-w-0">
+              <p className="text-slate-400 text-xs font-medium">{greeting},</p>
+              <h2 className="text-xl font-extrabold tracking-tight text-white mt-0.5 truncate flex items-center gap-1 group-hover:text-indigo-300 transition-colors">
+                {profileName.split(' ')[0]} <Edit2 className="w-3.5 h-3.5 text-slate-500 group-hover:text-indigo-300 transition-colors ml-1" />
+              </h2>
+            </div>
           </button>
           {/* Increased width for location button to show more address text */}
           <button 
             onClick={() => setShowLocationModal(true)}
-            className="flex items-center gap-1.5 bg-slate-900/80 border border-slate-800 px-4 py-2 rounded-xl text-xs font-bold text-indigo-400 hover:bg-slate-800 hover:scale-105 transition-all active:scale-95 shadow-sm max-w-[220px] flex-shrink-0"
+            className="flex items-center gap-1.5 bg-slate-900/80 border border-slate-800 px-4 py-2 rounded-xl text-xs font-bold text-indigo-400 hover:bg-slate-800 hover:scale-105 transition-all active:scale-95 shadow-sm max-w-[200px] flex-shrink-0"
           >
             <Navigation className="w-3.5 h-3.5 flex-shrink-0" />
             <span className="truncate font-semibold">{currentLocation}</span>
@@ -712,10 +725,9 @@ export const HomeView: React.FC<HomeViewProps> = ({ onChangeView, walletBalance,
 
       {/* Location Selection Modal with Map and Saved Addresses */}
       {showLocationModal && (
-        <div className="fixed inset-0 z-50 flex flex-col justify-end">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm" onClick={() => setShowLocationModal(false)}></div>
-          <div className="bg-white rounded-t-[2.5rem] p-6 relative z-10 border-t border-slate-100 max-h-[92vh] w-full overflow-y-auto hide-scrollbar animate-[slideUp_0.3s_ease-out] text-slate-800 pb-8">
-            <div className="w-12 h-1.5 bg-slate-200 rounded-full mx-auto mb-4 cursor-grab"></div>
+          <div className="bg-white rounded-[2rem] p-6 relative z-10 border border-slate-100 w-full max-w-md max-h-[90vh] overflow-y-auto hide-scrollbar animate-[fadeIn_0.2s_ease-out] text-slate-800 shadow-2xl">
             <button 
               onClick={() => setShowLocationModal(false)}
               className="absolute top-4 right-4 p-2 bg-slate-100 rounded-full text-slate-500 hover:bg-slate-200 transition-colors z-20"
@@ -837,10 +849,9 @@ export const HomeView: React.FC<HomeViewProps> = ({ onChangeView, walletBalance,
 
       {/* Save Address Modal */}
       {showSaveAddressModal && (
-        <div className="fixed inset-0 z-50 flex flex-col justify-end">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm" onClick={() => setShowSaveAddressModal(false)}></div>
-          <div className="bg-white rounded-t-[2.5rem] p-6 relative z-10 border-t border-slate-100 max-h-[92vh] w-full overflow-y-auto hide-scrollbar animate-[slideUp_0.3s_ease-out] text-slate-800 pb-8">
-            <div className="w-12 h-1.5 bg-slate-200 rounded-full mx-auto mb-4 cursor-grab"></div>
+          <div className="bg-white rounded-[2rem] p-6 relative z-10 border border-slate-100 w-full max-w-md max-h-[90vh] overflow-y-auto hide-scrollbar animate-[fadeIn_0.2s_ease-out] text-slate-800 shadow-2xl">
             <button 
               onClick={() => setShowSaveAddressModal(false)}
               className="absolute top-4 right-4 p-2 bg-slate-100 rounded-full text-slate-500 hover:bg-slate-200 transition-colors"
@@ -986,10 +997,9 @@ export const HomeView: React.FC<HomeViewProps> = ({ onChangeView, walletBalance,
 
       {/* Add Money & Convert Points Modal */}
       {showAddMoneyModal && (
-        <div className="fixed inset-0 z-50 flex flex-col justify-end">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm" onClick={() => setShowAddMoneyModal(false)}></div>
-          <div className="bg-white rounded-t-[2.5rem] p-6 relative z-10 border-t border-slate-100 max-h-[92vh] w-full overflow-y-auto hide-scrollbar animate-[slideUp_0.3s_ease-out] text-slate-800 pb-8">
-            <div className="w-12 h-1.5 bg-slate-200 rounded-full mx-auto mb-4 cursor-grab"></div>
+          <div className="bg-white rounded-[2rem] p-6 relative z-10 border border-slate-100 w-full max-w-md max-h-[90vh] overflow-y-auto hide-scrollbar animate-[fadeIn_0.2s_ease-out] text-slate-800 shadow-2xl">
             <button 
               onClick={() => setShowAddMoneyModal(false)}
               className="absolute top-4 right-4 p-2 bg-slate-100 rounded-full text-slate-50 hover:bg-slate-200 transition-colors"
@@ -1101,10 +1111,9 @@ export const HomeView: React.FC<HomeViewProps> = ({ onChangeView, walletBalance,
 
       {/* Rewards History Modal */}
       {showRewardsHistoryModal && (
-        <div className="fixed inset-0 z-50 flex flex-col justify-end">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm" onClick={() => setShowRewardsHistoryModal(false)}></div>
-          <div className="bg-white rounded-t-[2.5rem] p-6 relative z-10 border-t border-slate-100 max-h-[92vh] w-full overflow-y-auto hide-scrollbar animate-[slideUp_0.3s_ease-out] text-slate-800 flex flex-col pb-8">
-            <div className="w-12 h-1.5 bg-slate-200 rounded-full mx-auto mb-4 cursor-grab"></div>
+          <div className="bg-white rounded-[2rem] p-6 relative z-10 border border-slate-100 w-full max-w-md max-h-[90vh] flex flex-col animate-[fadeIn_0.2s_ease-out] text-slate-800 shadow-2xl">
             <button 
               onClick={() => setShowRewardsHistoryModal(false)}
               className="absolute top-4 right-4 p-2 bg-slate-100 rounded-full text-slate-500 hover:bg-slate-200 transition-colors"
@@ -1121,7 +1130,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onChangeView, walletBalance,
             </div>
 
             {/* Transaction List */}
-            <div className="flex-1 overflow-y-auto space-y-3 pr-1">
+            <div className="flex-1 overflow-y-auto space-y-3 pr-1 hide-scrollbar">
               {rewardTransactions.map((tx) => (
                 <div key={tx.id} className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
                   <div className="flex items-center gap-3">
@@ -1145,10 +1154,9 @@ export const HomeView: React.FC<HomeViewProps> = ({ onChangeView, walletBalance,
 
       {/* Referral Bonus Modal with QR Code */}
       {showReferralModal && (
-        <div className="fixed inset-0 z-50 flex flex-col justify-end">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm" onClick={() => setShowReferralModal(false)}></div>
-          <div className="bg-white rounded-t-[2.5rem] p-6 relative z-10 border-t border-slate-100 max-h-[92vh] w-full overflow-y-auto hide-scrollbar animate-[slideUp_0.3s_ease-out] text-slate-800 pb-8">
-            <div className="w-12 h-1.5 bg-slate-200 rounded-full mx-auto mb-4 cursor-grab"></div>
+          <div className="bg-white rounded-[2rem] p-6 relative z-10 border border-slate-100 w-full max-w-md max-h-[90vh] overflow-y-auto hide-scrollbar animate-[fadeIn_0.2s_ease-out] text-slate-800 shadow-2xl">
             <button 
               onClick={() => setShowReferralModal(false)}
               className="absolute top-4 right-4 p-2 bg-slate-100 rounded-full text-slate-500 hover:bg-slate-200 transition-colors"
