@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { User, CreditCard, Settings, HelpCircle, ChevronRight, LogOut, Link as LinkIcon, Edit2, X, ShieldCheck, Bell, Mail, Smartphone, MapPin, Moon, Sun, Monitor } from 'lucide-react';
+import React, { useState, useRef } from 'react';
+import { User, CreditCard, Settings, HelpCircle, ChevronRight, LogOut, Link as LinkIcon, Edit2, X, ShieldCheck, Bell, Mail, Smartphone, MapPin, Moon, Sun, Monitor, Camera } from 'lucide-react';
 import { ViewState, Theme } from '../types';
 
 interface AccountViewProps {
@@ -12,12 +12,15 @@ interface AccountViewProps {
   onUpdatePhone: (phone: string) => void;
   profileGender: 'Male' | 'Female' | 'Other';
   onUpdateGender: (gender: 'Male' | 'Female' | 'Other') => void;
+  profilePic: string;
+  onUpdateProfilePic: (pic: string) => void;
   appTheme: Theme;
   onUpdateTheme: (theme: Theme) => void;
   preferredPayment: string;
   onUpdatePreferredPayment: (methodId: string) => void;
   isEditingProfile: boolean;
   setIsEditingProfile: (val: boolean) => void;
+  onLogout: () => void;
 }
 
 export const AccountView: React.FC<AccountViewProps> = ({ 
@@ -30,21 +33,27 @@ export const AccountView: React.FC<AccountViewProps> = ({
   onUpdatePhone,
   profileGender,
   onUpdateGender,
+  profilePic,
+  onUpdateProfilePic,
   appTheme,
   onUpdateTheme,
   preferredPayment, 
   onUpdatePreferredPayment, 
   isEditingProfile, 
-  setIsEditingProfile 
+  setIsEditingProfile,
+  onLogout
 }) => {
   const [tempName, setTempName] = useState(profileName);
   const [tempEmail, setTempEmail] = useState(profileEmail);
   const [tempPhone, setTempPhone] = useState(profilePhone);
   const [tempGender, setTempGender] = useState<'Male' | 'Female' | 'Other'>(profileGender);
+  const [tempPic, setTempPic] = useState(profilePic);
   
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [tempTheme, setTempTheme] = useState<Theme>(appTheme);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleSaveProfile = (e: React.FormEvent) => {
     e.preventDefault();
@@ -53,6 +62,7 @@ export const AccountView: React.FC<AccountViewProps> = ({
       onUpdateEmail(tempEmail.trim());
       onUpdatePhone(tempPhone.trim());
       onUpdateGender(tempGender);
+      onUpdateProfilePic(tempPic);
       setIsEditingProfile(false);
       alert('Profile updated successfully!');
     }
@@ -64,14 +74,29 @@ export const AccountView: React.FC<AccountViewProps> = ({
     alert('Settings saved successfully!');
   };
 
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setTempPic(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-white pb-24 font-sans text-slate-800">
       {/* Premium Black Header */}
       <div className="bg-slate-950 pt-14 pb-12 px-6 text-white rounded-b-[2.5rem] shadow-md border-b border-slate-900">
         <div className="flex items-center">
-          <div className="w-16 h-16 bg-brand-600 rounded-2xl flex items-center justify-center text-white text-2xl font-bold mr-4 shadow-inner rotate-3">
-            <div className="-rotate-3">{profileName.charAt(0)}</div>
-          </div>
+          {profilePic ? (
+            <img src={profilePic} alt="Profile" className="w-16 h-16 rounded-2xl object-cover border-2 border-slate-800 mr-4 shadow-inner rotate-3" />
+          ) : (
+            <div className="w-16 h-16 bg-brand-600 rounded-2xl flex items-center justify-center text-white text-2xl font-bold mr-4 shadow-inner rotate-3">
+              <div className="-rotate-3">{profileName.charAt(0)}</div>
+            </div>
+          )}
           <div className="flex-1">
             <div className="flex items-center gap-2">
               <h1 className="text-2xl font-bold tracking-tight">{profileName}</h1>
@@ -129,7 +154,10 @@ export const AccountView: React.FC<AccountViewProps> = ({
           />
         </div>
 
-        <button className="w-full mt-6 bg-slate-50 p-4 rounded-2xl shadow-soft border border-slate-100 flex items-center justify-center text-rose-500 font-bold active:bg-rose-50 transition-colors">
+        <button 
+          onClick={onLogout}
+          className="w-full mt-6 bg-slate-50 p-4 rounded-2xl shadow-soft border border-slate-100 flex items-center justify-center text-rose-500 font-bold active:bg-rose-50 transition-colors"
+        >
           <LogOut className="w-5 h-5 mr-2" />
           Log Out
         </button>
@@ -137,10 +165,9 @@ export const AccountView: React.FC<AccountViewProps> = ({
 
       {/* Edit Profile Modal */}
       {isEditingProfile && (
-        <div className="fixed inset-x-0 top-0 bottom-14 z-50 flex flex-col justify-end">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm" onClick={() => setIsEditingProfile(false)}></div>
-          <div className="bg-white rounded-t-[2.5rem] p-6 relative z-10 border-t border-slate-100 max-h-[90vh] w-full overflow-y-auto hide-scrollbar animate-[slideUp_0.3s_ease-out] text-slate-800 pb-12">
-            <div className="w-12 h-1.5 bg-slate-200 rounded-full mx-auto mb-4 cursor-grab"></div>
+          <div className="bg-white rounded-[2rem] p-6 relative z-10 border border-slate-100 w-full max-w-md max-h-[90vh] overflow-y-auto hide-scrollbar animate-[fadeIn_0.2s_ease-out] text-slate-800 shadow-2xl">
             <button 
               onClick={() => setIsEditingProfile(false)}
               className="absolute top-4 right-4 p-2 bg-slate-100 rounded-full text-slate-500 hover:bg-slate-200 transition-colors"
@@ -149,8 +176,27 @@ export const AccountView: React.FC<AccountViewProps> = ({
             </button>
 
             <div className="flex flex-col items-center text-center mt-2 mb-6">
-              <div className="w-16 h-16 bg-indigo-50 rounded-2xl flex items-center justify-center mb-4 border border-indigo-100 shadow-sm">
-                <User className="w-8 h-8 text-indigo-600" />
+              <div className="relative mb-4">
+                {tempPic ? (
+                  <img src={tempPic} alt="Profile" className="w-20 h-20 rounded-2xl object-cover border-2 border-slate-200 shadow-sm" />
+                ) : (
+                  <div className="w-20 h-20 bg-indigo-50 rounded-2xl flex items-center justify-center border border-indigo-100 shadow-sm">
+                    <User className="w-10 h-10 text-indigo-600" />
+                  </div>
+                )}
+                <button 
+                  onClick={() => fileInputRef.current?.click()}
+                  className="absolute -bottom-2 -right-2 bg-brand-600 text-white p-2 rounded-full shadow-md hover:bg-brand-700 transition-colors"
+                >
+                  <Camera className="w-4 h-4" />
+                </button>
+                <input 
+                  type="file" 
+                  accept="image/*" 
+                  className="hidden" 
+                  ref={fileInputRef} 
+                  onChange={handleImageUpload} 
+                />
               </div>
               <h2 className="text-2xl font-extrabold text-slate-900">Edit Profile</h2>
               <p className="text-sm text-slate-500 font-medium mt-1">Update your personal information</p>
@@ -235,10 +281,9 @@ export const AccountView: React.FC<AccountViewProps> = ({
 
       {/* Settings Modal */}
       {showSettingsModal && (
-        <div className="fixed inset-x-0 top-0 bottom-14 z-50 flex flex-col justify-end">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm" onClick={() => setShowSettingsModal(false)}></div>
-          <div className="bg-white rounded-t-[2.5rem] p-6 relative z-10 border-t border-slate-100 max-h-[90vh] w-full overflow-y-auto hide-scrollbar animate-[slideUp_0.3s_ease-out] text-slate-800 pb-12">
-            <div className="w-12 h-1.5 bg-slate-200 rounded-full mx-auto mb-4 cursor-grab"></div>
+          <div className="bg-white rounded-[2rem] p-6 relative z-10 border border-slate-100 w-full max-w-md max-h-[90vh] overflow-y-auto hide-scrollbar animate-[fadeIn_0.2s_ease-out] text-slate-800 shadow-2xl">
             <button 
               onClick={() => setShowSettingsModal(false)}
               className="absolute top-4 right-4 p-2 bg-slate-100 rounded-full text-slate-500 hover:bg-slate-200 transition-colors"
