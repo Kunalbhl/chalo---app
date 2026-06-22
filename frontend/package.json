@@ -1,5 +1,5 @@
 {
-  "name": "chalo-india-s-everyday-super-app-frontend",
+  "name": "chalo-super-app-frontend",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -11,7 +11,8 @@
   "dependencies": {
     "react": "latest",
     "react-dom": "latest",
-    "lucide-react": "latest"
+    "lucide-react": "latest",
+    "@google/genai": "latest"
   },
   "devDependencies": {
     "@types/node": "latest",
