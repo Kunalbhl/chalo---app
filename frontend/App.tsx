@@ -16,6 +16,7 @@ import { PaymentMethodsView } from './views/PaymentMethodsView';
 import { AddressManagementView } from './views/AddressManagementView';
 import { AIAssistantView } from './views/AIAssistantView';
 import { SupportView } from './views/SupportView';
+import { AuthView } from './views/AuthView';
 import { RECENT_ACTIVITY } from './constants';
 
 // Custom hook for localStorage persistence
@@ -42,6 +43,7 @@ function useLocalStorage<T>(key: string, initialValue: T): [T, React.Dispatch<Re
 }
 
 const App: React.FC = () => {
+  const [isAuthenticated, setIsAuthenticated] = useLocalStorage<boolean>('chalo_isAuthenticated', false);
   const [currentView, setCurrentView] = useState<ViewState>('home');
   
   // Persisted States
@@ -52,6 +54,7 @@ const App: React.FC = () => {
   const [profileEmail, setProfileEmail] = useLocalStorage<string>('chalo_profileEmail', 'kunal.pareek@gmail.com');
   const [profilePhone, setProfilePhone] = useLocalStorage<string>('chalo_profilePhone', '+91 98765 43210');
   const [profileGender, setProfileGender] = useLocalStorage<'Male' | 'Female' | 'Other'>('chalo_profileGender', 'Male');
+  const [profilePic, setProfilePic] = useLocalStorage<string>('chalo_profilePic', '');
   const [appTheme, setAppTheme] = useLocalStorage<Theme>('chalo_theme', 'system');
   
   const [preferredPayment, setPreferredPayment] = useLocalStorage<string>('chalo_preferredPayment', 'upi-gpay');
@@ -120,6 +123,19 @@ const App: React.FC = () => {
 
   const [isEditingProfile, setIsEditingProfile] = useState<boolean>(false);
 
+  const handleLoginSuccess = (userData: { name: string; email: string; phone: string }) => {
+    setProfileName(userData.name);
+    setProfileEmail(userData.email);
+    setProfilePhone(userData.phone);
+    setIsAuthenticated(true);
+    setCurrentView('home');
+  };
+
+  const handleLogout = () => {
+    setIsAuthenticated(false);
+    setCurrentView('home');
+  };
+
   const handleUpdatePreferredPayment = (methodId: string) => {
     setPreferredPayment(methodId);
   };
@@ -182,6 +198,10 @@ const App: React.FC = () => {
     setIsEditingProfile(true);
   };
 
+  if (!isAuthenticated) {
+    return <AuthView onLoginSuccess={handleLoginSuccess} />;
+  }
+
   const renderView = () => {
     switch (currentView) {
       case 'home':
@@ -193,6 +213,7 @@ const App: React.FC = () => {
             onAddRewards={handleAddRewards}
             onAddWalletMoney={handleAddWalletMoney}
             profileName={profileName}
+            profilePic={profilePic}
             rewardTransactions={rewardTransactions}
             currentLocation={currentLocation}
             onUpdateLocation={setCurrentLocation}
@@ -352,14 +373,19 @@ const App: React.FC = () => {
             onUpdatePhone={setProfilePhone}
             profileGender={profileGender}
             onUpdateGender={setProfileGender}
+            profilePic={profilePic}
+            onUpdateProfilePic={setProfilePic}
             appTheme={appTheme}
             onUpdateTheme={setAppTheme}
+            preferredPayment={preferredPayment}
+            onUpdatePreferredPayment={handleUpdatePreferredPayment}
             isEditingProfile={isEditingProfile}
             setIsEditingProfile={setIsEditingProfile}
+            onLogout={handleLogout}
           />
         );
       default:
-        return <HomeView onChangeView={setCurrentView} walletBalance={walletBalance} rewardPoints={rewardPoints} onAddRewards={handleAddRewards} onAddWalletMoney={handleAddWalletMoney} profileName={profileName} rewardTransactions={rewardTransactions} currentLocation={currentLocation} onUpdateLocation={setCurrentLocation} onAddSavedAddress={handleAddSavedAddress} savedAddresses={savedAddresses} onEditProfile={handleEditProfile} />;
+        return <HomeView onChangeView={setCurrentView} walletBalance={walletBalance} rewardPoints={rewardPoints} onAddRewards={handleAddRewards} onAddWalletMoney={handleAddWalletMoney} profileName={profileName} profilePic={profilePic} rewardTransactions={rewardTransactions} currentLocation={currentLocation} onUpdateLocation={setCurrentLocation} onAddSavedAddress={handleAddSavedAddress} savedAddresses={savedAddresses} onEditProfile={handleEditProfile} />;
     }
   };
 
