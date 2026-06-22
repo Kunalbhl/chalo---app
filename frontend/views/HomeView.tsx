@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { Search, Car, Utensils, ShoppingCart, BedDouble, Bike, Map, Shield, ChevronRight, Wallet, Gift, Plane, Share2, Check, Info, X, Award, HelpCircle, Sparkles, Star, ArrowRight, ShoppingBag, Plus, ArrowUpRight, ArrowDownLeft, Smartphone, Navigation, Loader2, Coins, CreditCard, MapPin, Clock, Flame, History } from 'lucide-react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { Search, Car, Utensils, ShoppingCart, BedDouble, Bike, Map, Shield, ChevronRight, Wallet, Gift, Plane, Share2, Check, Info, X, Award, HelpCircle, Sparkles, Star, ArrowRight, ShoppingBag, Plus, ArrowUpRight, ArrowDownLeft, Smartphone, Navigation, Loader2, Coins, CreditCard, MapPin, Clock, Flame, History, Edit2, Bot } from 'lucide-react';
 import { AutoIcon, ChaloLogo, ChaloDownloadQRCode, PremiumRideIcon, PremiumFoodIcon, PremiumMartIcon, PremiumStaysIcon, AutoIcon as AutoIconPremium, PremiumMotoIcon, PremiumFlightIcon, PremiumIntercityIcon, PremiumInsuranceIcon, PremiumGiftsIcon, PremiumPayBillsIcon, PremiumMoreIcon } from '../components/Icons';
 import { ViewState, AnyProvider, RewardTransaction, SavedAddress } from '../types';
 import { ProviderBadge } from '../components/ProviderBadge';
@@ -15,6 +15,8 @@ interface HomeViewProps {
   currentLocation: string;
   onUpdateLocation: (loc: string) => void;
   onAddSavedAddress: (addr: SavedAddress) => void;
+  savedAddresses: SavedAddress[];
+  onEditProfile: () => void;
 }
 
 interface SearchableItem {
@@ -63,6 +65,18 @@ const RECENT_SEARCHES = [
   { query: 'Truffles Burger', category: 'Food & Dining' }
 ];
 
+const MOCK_PLACES = [
+  'Indiranagar, Bengaluru, Karnataka',
+  'Koramangala, Bengaluru, Karnataka',
+  'Whitefield, Bengaluru, Karnataka',
+  'MG Road, Bengaluru, Karnataka',
+  'Bandra West, Mumbai, Maharashtra',
+  'Andheri East, Mumbai, Maharashtra',
+  'Connaught Place, New Delhi, Delhi',
+  'Vasant Kunj, New Delhi, Delhi',
+  'Cyber City, Gurugram, Haryana'
+];
+
 // Mock Pincode to City/State mapping
 const PINCODE_MAP: Record<string, { city: string, state: string }> = {
   '560038': { city: 'Bengaluru', state: 'Karnataka' },
@@ -71,7 +85,7 @@ const PINCODE_MAP: Record<string, { city: string, state: string }> = {
   '110001': { city: 'New Delhi', state: 'Delhi' },
 };
 
-export const HomeView: React.FC<HomeViewProps> = ({ onChangeView, walletBalance, rewardPoints, onAddRewards, onAddWalletMoney, profileName, rewardTransactions, currentLocation, onUpdateLocation, onAddSavedAddress }) => {
+export const HomeView: React.FC<HomeViewProps> = ({ onChangeView, walletBalance, rewardPoints, onAddRewards, onAddWalletMoney, profileName, rewardTransactions, currentLocation, onUpdateLocation, onAddSavedAddress, savedAddresses, onEditProfile }) => {
   const [activeGlow, setActiveGlow] = useState<'none' | 'ride' | 'food' | 'mart' | 'stays'>('none');
   const [copied, setCopied] = useState(false);
   const [showReferralModal, setShowReferralModal] = useState(false);
@@ -87,6 +101,16 @@ export const HomeView: React.FC<HomeViewProps> = ({ onChangeView, walletBalance,
   const [pointsToConvert, setPointsToConvert] = useState<number>(100);
   const [isFetchingLocation, setIsFetchingLocation] = useState(false);
   const [locationSearchQuery, setLocationSearchQuery] = useState('');
+  const [hasAutoFetched, setHasAutoFetched] = useState(false);
+  const [fetchedAddressText, setFetchedAddressText] = useState('Using GPS');
+
+  // Map States
+  const [mapLat, setMapLat] = useState(12.9716);
+  const [mapLng, setMapLng] = useState(77.5946);
+  const mapRef = useRef<HTMLDivElement>(null);
+  const [map, setMap] = useState<google.maps.Map | null>(null);
+  const [marker, setMarker] = useState<google.maps.Marker | null>(null);
+  const autocompleteInputRef = useRef<HTMLInputElement>(null);
 
   // Save Address Form States
   const [addressLabel, setAddressLabel] = useState<'Home' | 'Work' | 'Other'>('Home');
@@ -107,6 +131,119 @@ export const HomeView: React.FC<HomeViewProps> = ({ onChangeView, walletBalance,
     else setGreeting('Good Evening 🌙');
   }, []);
 
+  // Initialize Google Map when modal opens
+  useEffect(() => {
+    if (showLocationModal && mapRef.current && !map) {
+      const initialLocation = { lat: mapLat, lng: mapLng };
+      const newMap = new window.google.maps.Map(mapRef.current, {
+        center: initialLocation,
+        zoom: 15,
+        disableDefaultUI: true,
+        zoomControl: true,
+      });
+      
+      const newMarker = new window.google.maps.Marker({
+        position: initialLocation,
+        map: newMap,
+        draggable: true,
+        animation: window.google.maps.Animation.DROP,
+      });
+
+      newMap.addListener('click', (e: google.maps.MapMouseEvent) => {
+        if (e.latLng) {
+          newMarker.setPosition(e.latLng);
+          updateLocationFromLatLng(e.latLng.lat(), e.latLng.lng());
+        }
+      });
+
+      newMarker.addListener('dragend', () => {
+        const pos = newMarker.getPosition();
+        if (pos) {
+          updateLocationFromLatLng(pos.lat(), pos.lng());
+        }
+      });
+
+      setMap(newMap);
+      setMarker(newMarker);
+
+      if (!hasAutoFetched) {
+        handleFetchLocation(newMap, newMarker);
+        setHasAutoFetched(true);
+      }
+    }
+  }, [showLocationModal]);
+
+  // Initialize Autocomplete
+  useEffect(() => {
+    if (showLocationModal && autocompleteInputRef.current && window.google) {
+      const autocomplete = new window.google.maps.places.Autocomplete(autocompleteInputRef.current, {
+        types: ['geocode', 'establishment'],
+        componentRestrictions: { country: 'in' }
+      });
+
+      autocomplete.addListener('place_changed', () => {
+        const place = autocomplete.getPlace();
+        if (place.geometry && place.geometry.location) {
+          const lat = place.geometry.location.lat();
+          const lng = place.geometry.location.lng();
+          
+          setMapLat(lat);
+          setMapLng(lng);
+          
+          if (map && marker) {
+            map.setCenter(place.geometry.location);
+            map.setZoom(17);
+            marker.setPosition(place.geometry.location);
+          }
+
+          const formattedAddress = place.formatted_address || place.name || '';
+          setFetchedAddressText(formattedAddress);
+          setLocationSearchQuery(formattedAddress);
+          
+          // Extract address components
+          extractAddressComponents(place);
+        }
+      });
+    }
+  }, [showLocationModal, map, marker]);
+
+  const updateLocationFromLatLng = (lat: number, lng: number) => {
+    setMapLat(lat);
+    setMapLng(lng);
+    
+    const geocoder = new window.google.maps.Geocoder();
+    geocoder.geocode({ location: { lat, lng } }, (results, status) => {
+      if (status === 'OK' && results && results[0]) {
+        const formattedAddress = results[0].formatted_address;
+        setFetchedAddressText(formattedAddress);
+        setLocationSearchQuery(formattedAddress);
+        extractAddressComponents(results[0]);
+      }
+    });
+  };
+
+  const extractAddressComponents = (place: google.maps.places.PlaceResult | google.maps.GeocoderResult) => {
+    let newCity = '';
+    let newState = '';
+    let newPincode = '';
+    let newArea = '';
+
+    place.address_components?.forEach(component => {
+      const types = component.types;
+      if (types.includes('locality')) newCity = component.long_name;
+      if (types.includes('administrative_area_level_1')) newState = component.long_name;
+      if (types.includes('postal_code')) newPincode = component.long_name;
+      if (types.includes('sublocality') || types.includes('neighborhood') || types.includes('route')) {
+        newArea = newArea ? `${newArea}, ${component.long_name}` : component.long_name;
+      }
+    });
+
+    setCity(newCity);
+    setState(newState);
+    setPincode(newPincode);
+    setArea(newArea || place.name || '');
+  };
+
   // Auto-generate referral code from profile name
   const referralCode = `${profileName.split(' ')[0].toUpperCase()}1000`;
 
@@ -117,47 +254,49 @@ export const HomeView: React.FC<HomeViewProps> = ({ onChangeView, walletBalance,
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const handleFetchLocation = () => {
+  const handleFetchLocation = (currentMap = map, currentMarker = marker) => {
     setIsFetchingLocation(true);
+    setFetchedAddressText('Locating...');
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (position) => {
           const { latitude, longitude } = position.coords;
-          let detectedAddress = "Indiranagar, Bengaluru, Karnataka";
-          let detectedPincode = "560038";
-          if (latitude > 18 && latitude < 20 && longitude > 72 && longitude < 74) {
-            detectedAddress = "Bandra West, Mumbai, Maharashtra";
-            detectedPincode = "400050";
-          } else if (latitude > 28 && latitude < 29 && longitude > 76 && longitude < 78) {
-            detectedAddress = "Connaught Place, New Delhi";
-            detectedPincode = "110001";
+          setMapLat(latitude);
+          setMapLng(longitude);
+          
+          if (currentMap && currentMarker) {
+            const pos = new window.google.maps.LatLng(latitude, longitude);
+            currentMap.setCenter(pos);
+            currentMap.setZoom(17);
+            currentMarker.setPosition(pos);
           }
-          onUpdateLocation(detectedAddress);
-          setArea(detectedAddress.split(',')[0]);
-          setPincode(detectedPincode);
-          handlePincodeChange(detectedPincode);
-          setIsFetchingLocation(false);
-          setShowLocationModal(false);
+
+          const geocoder = new window.google.maps.Geocoder();
+          geocoder.geocode({ location: { lat: latitude, lng: longitude } }, (results, status) => {
+            if (status === 'OK' && results && results[0]) {
+              const formattedAddress = results[0].formatted_address;
+              setFetchedAddressText(formattedAddress);
+              setLocationSearchQuery(formattedAddress);
+              onUpdateLocation(formattedAddress);
+              extractAddressComponents(results[0]);
+            } else {
+              setFetchedAddressText('Location found, address unavailable');
+            }
+            setIsFetchingLocation(false);
+          });
         },
         (error) => {
           console.error(error);
-          const fallbacks = [
-            { addr: "Indiranagar, Bengaluru, Karnataka", pin: "560038" },
-            { addr: "Connaught Place, New Delhi", pin: "110001" },
-            { addr: "Bandra West, Mumbai, Maharashtra", pin: "400050" }
-          ];
-          const randomLoc = fallbacks[Math.floor(Math.random() * fallbacks.length)];
-          onUpdateLocation(randomLoc.addr);
-          setArea(randomLoc.addr.split(',')[0]);
-          setPincode(randomLoc.pin);
-          handlePincodeChange(randomLoc.pin);
+          alert("Unable to fetch location. Please check permissions.");
           setIsFetchingLocation(false);
-          setShowLocationModal(false);
-        }
+          setFetchedAddressText('Location unavailable');
+        },
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
       );
     } else {
       alert("Geolocation is not supported by this browser.");
       setIsFetchingLocation(false);
+      setFetchedAddressText('Location unavailable');
     }
   };
 
@@ -181,7 +320,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onChangeView, walletBalance,
 
   const handleSaveAddressSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const fullAddress = `${flatNo}, ${area}, ${city}, ${state} ${pincode}`;
+    const fullAddress = `${flatNo ? flatNo + ', ' : ''}${area}, ${city}, ${state} ${pincode}`;
     const newAddr: SavedAddress = {
       id: `addr-${Date.now()}`,
       label: addressLabel,
@@ -195,8 +334,8 @@ export const HomeView: React.FC<HomeViewProps> = ({ onChangeView, walletBalance,
       address: fullAddress, // For backward compatibility in UI
       isPrimary: isPrimaryAddress,
       isPreferred: isPreferredAddress,
-      lat: 12.9716,
-      lng: 77.5946
+      lat: mapLat,
+      lng: mapLng
     };
     onAddSavedAddress(newAddr);
     setShowSaveAddressModal(false);
@@ -255,6 +394,12 @@ export const HomeView: React.FC<HomeViewProps> = ({ onChangeView, walletBalance,
 
   const hasResults = Object.keys(groupedSearchResults).length > 0;
 
+  // Mock Autocomplete for Location Search
+  const locationSuggestions = useMemo(() => {
+    if (!locationSearchQuery.trim()) return [];
+    return MOCK_PLACES.filter(place => place.toLowerCase().includes(locationSearchQuery.toLowerCase()));
+  }, [locationSearchQuery]);
+
   // Dynamic header glow based on hovered/selected service
   const getGlowClass = () => {
     switch (activeGlow) {
@@ -276,7 +421,15 @@ export const HomeView: React.FC<HomeViewProps> = ({ onChangeView, walletBalance,
   };
 
   return (
-    <div className="pb-28 bg-white min-h-screen font-sans text-slate-800 transition-all duration-500">
+    <div className="pb-28 bg-white min-h-screen font-sans text-slate-800 transition-all duration-500 relative">
+      {/* Floating Chalo AI Button */}
+      <button 
+        onClick={() => onChangeView('ai')}
+        className="fixed bottom-20 right-4 z-40 bg-brand-600 text-white p-4 rounded-full shadow-lg hover:scale-105 active:scale-95 transition-transform flex items-center justify-center"
+      >
+        <Sparkles className="w-6 h-6" />
+      </button>
+
       {/* Premium Black Header Area with Reactive Glow - Optimized Space */}
       <div className={`bg-gradient-to-b ${getGlowClass()} bg-slate-950 px-6 pt-10 pb-14 relative z-10 rounded-b-[2.5rem] transition-all duration-500 border-b border-slate-900`}>
         
@@ -311,12 +464,12 @@ export const HomeView: React.FC<HomeViewProps> = ({ onChangeView, walletBalance,
         {/* Location Fetcher & Clickable Greeting to Profile */}
         <div className="flex justify-between items-end mb-4 text-white gap-4">
           <button 
-            onClick={() => onChangeView('account')}
+            onClick={onEditProfile}
             className="flex-1 min-w-0 text-left hover:opacity-80 transition-opacity group"
           >
             <p className="text-slate-400 text-xs font-medium">{greeting},</p>
             <h2 className="text-xl font-extrabold tracking-tight text-white mt-0.5 truncate flex items-center gap-1 group-hover:text-indigo-300 transition-colors">
-              {profileName} <ChevronRight className="w-4 h-4 text-slate-500 group-hover:text-indigo-300 transition-colors" />
+              {profileName} <Edit2 className="w-3.5 h-3.5 text-slate-500 group-hover:text-indigo-300 transition-colors ml-1" />
             </h2>
           </button>
           {/* Increased width for location button to show more address text */}
@@ -557,7 +710,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onChangeView, walletBalance,
         </div>
       </div>
 
-      {/* Location Selection Modal */}
+      {/* Location Selection Modal with Map and Saved Addresses */}
       {showLocationModal && (
         <div className="fixed inset-0 z-50 flex flex-col justify-end">
           <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm" onClick={() => setShowLocationModal(false)}></div>
@@ -565,51 +718,109 @@ export const HomeView: React.FC<HomeViewProps> = ({ onChangeView, walletBalance,
             <div className="w-12 h-1.5 bg-slate-200 rounded-full mx-auto mb-4 cursor-grab"></div>
             <button 
               onClick={() => setShowLocationModal(false)}
-              className="absolute top-4 right-4 p-2 bg-slate-100 rounded-full text-slate-500 hover:bg-slate-200 transition-colors"
+              className="absolute top-4 right-4 p-2 bg-slate-100 rounded-full text-slate-500 hover:bg-slate-200 transition-colors z-20"
             >
               <X className="w-5 h-5" />
             </button>
 
-            <div className="flex flex-col items-center text-center mt-2 mb-6">
-              <div className="w-16 h-16 bg-indigo-50 rounded-2xl flex items-center justify-center mb-4 border border-indigo-100 shadow-sm">
-                <MapPin className="w-8 h-8 text-indigo-600" />
-              </div>
+            <div className="flex flex-col items-center text-center mt-2 mb-4">
               <h2 className="text-2xl font-extrabold text-slate-900">Select Location</h2>
               <p className="text-sm text-slate-500 font-medium mt-1">Choose your delivery or pickup address</p>
             </div>
 
+            {/* Interactive Map Embed */}
+            <div className="w-full h-48 bg-slate-100 rounded-2xl border border-slate-200 relative overflow-hidden mb-4 shadow-inner">
+              <div ref={mapRef} className="absolute inset-0"></div>
+              
+              {/* Locate Me Button Overlay */}
+              <button 
+                onClick={() => handleFetchLocation()}
+                disabled={isFetchingLocation}
+                className="absolute bottom-3 right-3 bg-white p-2.5 rounded-xl border border-slate-200 shadow-md text-brand-600 active:scale-95 transition-all z-10"
+              >
+                {isFetchingLocation ? (
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                ) : (
+                  <Navigation className="w-5 h-5" />
+                )}
+              </button>
+            </div>
+
             <div className="space-y-4">
-              {/* Search Bar */}
+              {/* Search Bar with Google Places Autocomplete */}
               <div className="relative">
                 <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
                 <input 
+                  ref={autocompleteInputRef}
                   type="text" 
                   value={locationSearchQuery}
                   onChange={(e) => setLocationSearchQuery(e.target.value)}
                   placeholder="Search area, street, or building..." 
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3.5 pl-11 pr-4 text-sm text-slate-800 focus:ring-2 focus:ring-brand-500 outline-none font-medium"
                 />
+                {locationSuggestions.length > 0 && (
+                  <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-200 rounded-xl shadow-lg z-30 overflow-hidden">
+                    {locationSuggestions.map((place, idx) => (
+                      <button
+                        key={idx}
+                        onClick={() => {
+                          onUpdateLocation(place);
+                          setShowLocationModal(false);
+                          setLocationSearchQuery('');
+                        }}
+                        className="w-full text-left px-4 py-3 hover:bg-slate-50 border-b border-slate-100 last:border-0 text-sm font-medium text-slate-700 flex items-center gap-2"
+                      >
+                        <MapPin className="w-4 h-4 text-slate-400" /> {place}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* Current Location Button */}
               <button 
-                onClick={handleFetchLocation}
+                onClick={() => handleFetchLocation()}
                 disabled={isFetchingLocation}
                 className="w-full flex items-center gap-3 p-4 bg-brand-50 border border-brand-100 rounded-2xl hover:bg-brand-100 transition-colors text-left"
               >
                 <div className="bg-white p-2 rounded-full shadow-sm">
                   {isFetchingLocation ? <Loader2 className="w-5 h-5 text-brand-600 animate-spin" /> : <Navigation className="w-5 h-5 text-brand-600" />}
                 </div>
-                <div>
+                <div className="flex-1 min-w-0">
                   <h4 className="font-bold text-brand-700 text-sm">Use Current Location</h4>
-                  <p className="text-xs text-brand-600/70 mt-0.5">Using GPS</p>
+                  <p className="text-xs text-brand-600/70 mt-0.5 truncate">{fetchedAddressText}</p>
                 </div>
               </button>
+
+              {/* Saved Addresses List */}
+              {savedAddresses.length > 0 && (
+                <div className="pt-2">
+                  <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Saved Addresses</h3>
+                  <div className="space-y-2">
+                    {savedAddresses.map(addr => (
+                      <button 
+                        key={addr.id}
+                        onClick={() => {
+                          onUpdateLocation(addr.fullAddress || addr.address);
+                          setShowLocationModal(false);
+                        }}
+                        className="w-full flex items-start p-3.5 bg-slate-50 border border-slate-200 rounded-2xl hover:bg-slate-100 transition-colors text-left"
+                      >
+                        <MapPin className="w-5 h-5 text-slate-400 mr-3 mt-0.5 flex-shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <h4 className="font-bold text-slate-800 text-sm">{addr.label === 'Other' ? addr.customName : addr.label}</h4>
+                          <p className="text-xs text-slate-500 mt-0.5 whitespace-normal leading-relaxed">{addr.fullAddress || addr.address}</p>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Add New Address Button */}
               <button 
                 onClick={() => { setShowLocationModal(false); setShowSaveAddressModal(true); }}
-                className="w-full flex items-center gap-3 p-4 bg-slate-50 border border-slate-200 rounded-2xl hover:bg-slate-100 transition-colors text-left"
+                className="w-full flex items-center gap-3 p-4 bg-slate-50 border border-slate-200 rounded-2xl hover:bg-slate-100 transition-colors text-left mt-2"
               >
                 <div className="bg-white p-2 rounded-full shadow-sm border border-slate-200">
                   <Plus className="w-5 h-5 text-slate-600" />
@@ -648,7 +859,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onChangeView, walletBalance,
             <form onSubmit={handleSaveAddressSubmit} className="space-y-5">
               <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Detected Address</p>
-                <p className="text-sm font-semibold text-slate-800 mt-1 leading-relaxed">{currentLocation}</p>
+                <p className="text-sm font-semibold text-slate-800 mt-1 leading-relaxed">{fetchedAddressText}</p>
               </div>
 
               {/* Label Selector */}
@@ -766,7 +977,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onChangeView, walletBalance,
                 type="submit"
                 className="w-full py-4 bg-brand-600 hover:bg-brand-700 text-white rounded-xl font-bold text-base shadow-md transition-colors"
               >
-                Save Address
+                Confirm & Save Address
               </button>
             </form>
           </div>
@@ -781,7 +992,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onChangeView, walletBalance,
             <div className="w-12 h-1.5 bg-slate-200 rounded-full mx-auto mb-4 cursor-grab"></div>
             <button 
               onClick={() => setShowAddMoneyModal(false)}
-              className="absolute top-4 right-4 p-2 bg-slate-100 rounded-full text-slate-500 hover:bg-slate-200 transition-colors"
+              className="absolute top-4 right-4 p-2 bg-slate-100 rounded-full text-slate-50 hover:bg-slate-200 transition-colors"
             >
               <X className="w-5 h-5" />
             </button>
