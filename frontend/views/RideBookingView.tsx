@@ -1,41 +1,188 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { ArrowLeft, MapPin, Navigation, Clock, User, ShieldCheck } from 'lucide-react';
-import { BookingStep, Location, VehicleOption } from '../types';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { ArrowLeft, MapPin, Navigation, Clock, User, ShieldCheck, CreditCard, Smartphone, Wallet, Banknote, CheckCircle2, X, Loader2, ChevronRight, Search } from 'lucide-react';
+import { BookingStep, Location, VehicleOption, SavedMethod, WalletItem, ActivityItem } from '../types';
 import { RECENT_LOCATIONS, VEHICLES } from '../constants';
 import { getVehicleIcon } from '../components/Icons';
 import { ProviderBadge } from '../components/ProviderBadge';
+import { RazorpayCheckout } from '../components/RazorpayCheckout';
 
 interface RideBookingViewProps {
   onBack: () => void;
+  currentLocation: string;
+  preferredPayment: string;
+  upis: SavedMethod[];
+  cards: SavedMethod[];
+  wallets: WalletItem[];
+  walletBalance: number;
+  onAddActivity: (newActivity: ActivityItem) => void;
 }
 
-export const RideBookingView: React.FC<RideBookingViewProps> = ({ onBack }) => {
+const MOCK_PLACES = [
+  'Indiranagar, Bengaluru, Karnataka',
+  'Koramangala, Bengaluru, Karnataka',
+  'Whitefield, Bengaluru, Karnataka',
+  'MG Road, Bengaluru, Karnataka',
+  'Mumbai Airport',
+  'Delhi Airport',
+  'Connaught Place, New Delhi'
+];
+
+export const RideBookingView: React.FC<RideBookingViewProps> = ({ onBack, currentLocation, preferredPayment, upis, cards, wallets, walletBalance, onAddActivity }) => {
   const [step, setStep] = useState<BookingStep>('search');
-  const [pickup, setPickup] = useState<string>('Current Location');
+  const [pickup, setPickup] = useState<string>(currentLocation);
   const [dropoff, setDropoff] = useState<string>('');
   const [selectedVehicle, setSelectedVehicle] = useState<VehicleOption | null>(null);
   const [sortBy, setSortBy] = useState<'price' | 'eta'>('price');
   const [filterType, setFilterType] = useState<'all' | 'auto' | 'bike' | 'car'>('all');
+  
+  const [showPaymentSelector, setShowPaymentSelector] = useState(false);
+  const [selectedPayment, setSelectedPayment] = useState<string>(preferredPayment);
+  const [showRazorpay, setShowRazorpay] = useState(false);
+  
+  // Tracking state
+  const [carPos, setCarPos] = useState({ top: '80%', left: '20%' });
 
-  // Simulate finding a driver
+  // Map States
+  const mapRef = useRef<HTMLDivElement>(null);
+  const [map, setMap] = useState<google.maps.Map | null>(null);
+  const [directionsRenderer, setDirectionsRenderer] = useState<google.maps.DirectionsRenderer | null>(null);
+  const autocompleteInputRef = useRef<HTMLInputElement>(null);
+  const pickupInputRef = useRef<HTMLInputElement>(null);
+
+  // Initialize Google Map
   useEffect(() => {
-    if (step === 'confirming') {
-      const timer = setTimeout(() => {
-        setStep('on_way');
-      }, 3000);
-      return () => clearTimeout(timer);
+    if (mapRef.current && !map && window.google) {
+      const newMap = new window.google.maps.Map(mapRef.current, {
+        center: { lat: 12.9716, lng: 77.5946 }, // Default Bengaluru
+        zoom: 13,
+        disableDefaultUI: true,
+      });
+      
+      const newDirectionsRenderer = new window.google.maps.DirectionsRenderer({
+        map: newMap,
+        suppressMarkers: false,
+      });
+
+      setMap(newMap);
+      setDirectionsRenderer(newDirectionsRenderer);
+    }
+  }, [mapRef.current]);
+
+  // Initialize Autocomplete for Dropoff
+  useEffect(() => {
+    if (step === 'search' && autocompleteInputRef.current && window.google) {
+      const autocomplete = new window.google.maps.places.Autocomplete(autocompleteInputRef.current, {
+        types: ['geocode', 'establishment'],
+        componentRestrictions: { country: 'in' }
+      });
+
+      autocomplete.addListener('place_changed', () => {
+        const place = autocomplete.getPlace();
+        if (place.formatted_address || place.name) {
+          const address = place.formatted_address || place.name || '';
+          setDropoff(address);
+          handleLocationSelect(address);
+        }
+      });
     }
   }, [step]);
 
-  const handleLocationSelect = (loc: Location) => {
-    setDropoff(loc.name);
+  // Initialize Autocomplete for Pickup
+  useEffect(() => {
+    if (step === 'search' && pickupInputRef.current && window.google) {
+      const autocomplete = new window.google.maps.places.Autocomplete(pickupInputRef.current, {
+        types: ['geocode', 'establishment'],
+        componentRestrictions: { country: 'in' }
+      });
+
+      autocomplete.addListener('place_changed', () => {
+        const place = autocomplete.getPlace();
+        if (place.formatted_address || place.name) {
+          setPickup(place.formatted_address || place.name || '');
+        }
+      });
+    }
+  }, [step]);
+
+  // Draw Route when pickup and dropoff are set
+  useEffect(() => {
+    if ((step === 'verify_pickup' || step === 'select_vehicle') && pickup && dropoff && window.google && directionsRenderer) {
+      const directionsService = new window.google.maps.DirectionsService();
+      directionsService.route(
+        {
+          origin: pickup,
+          destination: dropoff,
+          travelMode: window.google.maps.TravelMode.DRIVING,
+        },
+        (result, status) => {
+          if (status === window.google.maps.DirectionsStatus.OK) {
+            directionsRenderer.setDirections(result);
+          } else {
+            console.error(`error fetching directions ${result}`);
+          }
+        }
+      );
+    }
+  }, [step, pickup, dropoff, directionsRenderer]);
+
+  // Simulate finding a driver and tracking
+  useEffect(() => {
+    if (step === 'confirming') {
+      const timer = setTimeout(() => {
+        setStep('accepted');
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+    
+    if (step === 'accepted') {
+      const timer = setTimeout(() => {
+        setStep('on_way');
+      }, 2000);
+      return () => clearTimeout(timer);
+    }
+
+    if (step === 'on_way') {
+      const interval = setInterval(() => {
+        setCarPos(prev => ({
+          top: `${Math.max(30, parseInt(prev.top) - 5)}%`,
+          left: `${Math.min(70, parseInt(prev.left) + 5)}%`
+        }));
+      }, 2000);
+      return () => clearInterval(interval);
+    }
+  }, [step]);
+
+  const handleLocationSelect = (locName: string) => {
+    setDropoff(locName);
+    setStep('verify_pickup');
+  };
+
+  const handleConfirmPickup = () => {
     setStep('select_vehicle');
   };
 
   const handleBook = () => {
     if (selectedVehicle) {
-      setStep('confirming');
+      if (selectedPayment !== 'cash') {
+        setShowRazorpay(true);
+      } else {
+        processBooking();
+      }
     }
+  };
+
+  const processBooking = () => {
+    setShowRazorpay(false);
+    setStep('confirming');
+    onAddActivity({
+      id: `act-${Date.now()}`,
+      provider: selectedVehicle!.provider,
+      type: 'ride',
+      title: `${selectedVehicle!.name} to ${dropoff.split(',')[0]}`,
+      date: 'Just Now',
+      status: 'ongoing',
+      price: selectedVehicle!.price
+    });
   };
 
   const sortedAndFilteredVehicles = useMemo(() => {
@@ -52,42 +199,43 @@ export const RideBookingView: React.FC<RideBookingViewProps> = ({ onBack }) => {
 
   return (
     <div className="h-screen flex flex-col bg-brand-950 relative overflow-hidden text-slate-100">
+      {showRazorpay && selectedVehicle && (
+        <RazorpayCheckout 
+          amount={selectedVehicle.price} 
+          onSuccess={processBooking} 
+          onCancel={() => setShowRazorpay(false)} 
+        />
+      )}
+
       {/* Header */}
       <div className="absolute top-0 left-0 right-0 z-20 bg-slate-900/90 backdrop-blur-md pt-12 pb-4 px-4 flex items-center shadow-sm border-b border-slate-800/50">
         <button onClick={step === 'search' ? onBack : () => setStep('search')} className="p-2 -ml-2 rounded-full hover:bg-slate-800 active:bg-slate-700 transition-colors">
           <ArrowLeft className="w-6 h-6 text-white" />
         </button>
         <h1 className="text-lg font-semibold ml-2 text-white">
-          {step === 'search' ? 'Plan your ride' : step === 'select_vehicle' ? 'Compare & Choose' : 'Booking'}
+          {step === 'search' ? 'Plan your ride' : 
+           step === 'verify_pickup' ? 'Confirm Pickup' : 
+           step === 'select_vehicle' ? 'Compare & Choose' : 'Booking'}
         </h1>
       </div>
 
-      {/* Map Background (Mock) */}
-      <div className="absolute inset-0 z-0 bg-slate-950">
-        {/* Fake map pattern */}
-        <div className="w-full h-full opacity-10" style={{ backgroundImage: 'radial-gradient(#fff 1px, transparent 1px)', backgroundSize: '20px 20px' }}></div>
+      {/* Map Background */}
+      <div className="absolute inset-0 z-0 bg-slate-100">
+        <div ref={mapRef} className="absolute inset-0"></div>
         
-        {/* Fake Route Line (only show when vehicle selected) */}
-        {step !== 'search' && (
-          <svg className="absolute inset-0 w-full h-full pointer-events-none" style={{ zIndex: 1 }}>
-            <path d="M 150 300 Q 250 200 300 400 T 200 600" fill="none" stroke="#6366f1" strokeWidth="4" strokeDasharray="8 8" className="animate-[dash_20s_linear_infinite]" />
-          </svg>
-        )}
+        {/* Overlay to darken map slightly for better contrast with dark UI */}
+        <div className="absolute inset-0 bg-slate-950/40 pointer-events-none"></div>
 
-        {/* Fake Pins */}
-        {step !== 'search' && (
-          <>
-            <div className="absolute top-[300px] left-[150px] -translate-x-1/2 -translate-y-full z-10">
-              <div className="bg-blue-600 text-white p-2 rounded-full shadow-lg border-2 border-white">
-                <Navigation className="w-4 h-4" />
-              </div>
+        {/* Simulated Tracking Car */}
+        {(step === 'accepted' || step === 'on_way') && (
+          <div 
+            className="absolute z-10 transition-all duration-[2000ms] ease-linear"
+            style={{ top: carPos.top, left: carPos.left }}
+          >
+            <div className="bg-white p-2 rounded-full shadow-lg border-2 border-brand-500">
+              {getVehicleIcon(selectedVehicle?.iconType || 'car', "w-6 h-6 text-brand-600")}
             </div>
-            <div className="absolute top-[600px] left-[200px] -translate-x-1/2 -translate-y-full z-10">
-              <div className="bg-brand-600 text-white p-2 rounded-full shadow-lg border-2 border-white">
-                <MapPin className="w-4 h-4" />
-              </div>
-            </div>
-          </>
+          </div>
         )}
       </div>
 
@@ -106,20 +254,22 @@ export const RideBookingView: React.FC<RideBookingViewProps> = ({ onBack }) => {
                 <div className="mb-4 relative">
                   <div className="absolute -left-8 top-3 w-2 h-2 rounded-full bg-blue-500 ring-4 ring-blue-950"></div>
                   <input 
+                    ref={pickupInputRef}
                     type="text" 
                     value={pickup}
                     onChange={(e) => setPickup(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-white focus:ring-2 focus:ring-brand-500 outline-none"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-white focus:ring-2 focus:ring-brand-500 outline-none text-sm"
                     placeholder="Pickup location"
                   />
                 </div>
                 <div className="relative">
                   <div className="absolute -left-8 top-3 w-2 h-2 rounded-sm bg-brand-500 ring-4 ring-brand-950"></div>
                   <input 
+                    ref={autocompleteInputRef}
                     type="text" 
                     value={dropoff}
                     onChange={(e) => setDropoff(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-white focus:ring-2 focus:ring-brand-500 outline-none"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-white focus:ring-2 focus:ring-brand-500 outline-none text-sm"
                     placeholder="Where to?"
                     autoFocus
                   />
@@ -127,33 +277,56 @@ export const RideBookingView: React.FC<RideBookingViewProps> = ({ onBack }) => {
               </div>
 
               {/* Recent Locations */}
-              <div>
-                <h3 className="text-xs font-bold text-slate-500 mb-3 uppercase tracking-wider">Recent</h3>
-                <div className="space-y-0">
-                  {RECENT_LOCATIONS.map((loc, idx) => (
-                    <button 
-                      key={idx}
-                      onClick={() => handleLocationSelect(loc)}
-                      className="w-full flex items-center py-4 border-b border-slate-800/50 last:border-0 active:bg-slate-800/40 text-left"
-                    >
-                      <div className="bg-slate-950 p-2.5 rounded-xl mr-4 border border-slate-800">
-                        <Clock className="w-5 h-5 text-slate-400" />
-                      </div>
-                      <div>
-                        <p className="font-bold text-white text-sm">{loc.name}</p>
-                        <p className="text-xs text-slate-400 truncate max-w-[250px] mt-0.5">{loc.address}</p>
-                      </div>
-                    </button>
-                  ))}
+              {!dropoff && (
+                <div>
+                  <h3 className="text-xs font-bold text-slate-500 mb-3 uppercase tracking-wider">Recent</h3>
+                  <div className="space-y-0">
+                    {RECENT_LOCATIONS.map((loc, idx) => (
+                      <button 
+                        key={idx}
+                        onClick={() => handleLocationSelect(loc.address)}
+                        className="w-full flex items-center py-4 border-b border-slate-800/50 last:border-0 active:bg-slate-800/40 text-left"
+                      >
+                        <div className="bg-slate-950 p-2.5 rounded-xl mr-4 border border-slate-800">
+                          <Clock className="w-5 h-5 text-slate-400" />
+                        </div>
+                        <div>
+                          <p className="font-bold text-white text-sm">{loc.name}</p>
+                          <p className="text-xs text-slate-400 truncate max-w-[250px] mt-0.5">{loc.address}</p>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
                 </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Step 1.5: Verify Pickup */}
+        {step === 'verify_pickup' && (
+          <div className="bg-slate-900 rounded-t-3xl shadow-[0_-10px_40px_rgba(0,0,0,0.5)] pointer-events-auto p-6 border-t border-slate-800">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="bg-blue-500/20 p-2 rounded-full">
+                <MapPin className="w-5 h-5 text-blue-400" />
+              </div>
+              <div>
+                <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">Pickup Location</p>
+                <p className="font-bold text-white text-sm truncate max-w-[280px]">{pickup}</p>
               </div>
             </div>
+            <button 
+              onClick={handleConfirmPickup}
+              className="w-full py-4 bg-brand-600 hover:bg-brand-700 text-white rounded-xl font-bold text-lg shadow-md transition-colors"
+            >
+              Confirm Pickup
+            </button>
           </div>
         )}
 
         {/* Step 2: Select Vehicle (Aggregator View) */}
         {step === 'select_vehicle' && (
-          <div className="bg-slate-900 rounded-t-3xl shadow-[0_-10px_40px_rgba(0,0,0,0.5)] pointer-events-auto flex flex-col max-h-[75vh] border-t border-slate-800">
+          <div className="bg-slate-900 rounded-t-3xl shadow-[0_-10px_40px_rgba(0,0,0,0.5)] pointer-events-auto flex flex-col max-h-[80vh] border-t border-slate-800">
             <div className="w-12 h-1.5 bg-slate-800 rounded-full mx-auto mt-3 mb-2"></div>
             
             {/* Filters & Sorting */}
@@ -194,7 +367,7 @@ export const RideBookingView: React.FC<RideBookingViewProps> = ({ onBack }) => {
               </div>
             </div>
             
-            <div className="flex-1 overflow-y-auto px-4 py-2 pb-24 bg-slate-950/50">
+            <div className="flex-1 overflow-y-auto px-4 py-2 pb-32 bg-slate-950/50">
               <div className="space-y-3">
                 {sortedAndFilteredVehicles.map((vehicle) => (
                   <button
@@ -228,8 +401,15 @@ export const RideBookingView: React.FC<RideBookingViewProps> = ({ onBack }) => {
               </div>
             </div>
 
-            {/* Bottom Action Bar */}
+            {/* Bottom Action Bar with Payment Selector */}
             <div className="absolute bottom-0 left-0 right-0 bg-slate-900 p-4 border-t border-slate-800 pb-safe shadow-[0_-4px_10px_rgba(0,0,0,0.5)]">
+              <div className="flex items-center justify-between mb-3 px-1">
+                <div className="flex items-center gap-2">
+                  <CreditCard className="w-4 h-4 text-slate-400" />
+                  <span className="text-sm font-bold text-white capitalize">{selectedPayment.replace('-', ' ')}</span>
+                </div>
+                <button onClick={() => setShowPaymentSelector(true)} className="text-brand-400 text-xs font-bold">Change</button>
+              </div>
               <button 
                 onClick={handleBook}
                 disabled={!selectedVehicle}
@@ -260,8 +440,8 @@ export const RideBookingView: React.FC<RideBookingViewProps> = ({ onBack }) => {
           </div>
         )}
 
-        {/* Step 4: Driver on the way */}
-        {step === 'on_way' && (
+        {/* Step 4: Driver Accepted & On Way */}
+        {(step === 'accepted' || step === 'on_way') && (
           <div className="bg-slate-900 rounded-t-3xl shadow-[0_-10px_40px_rgba(0,0,0,0.5)] pointer-events-auto p-6 border-t border-slate-800">
             <div className="flex items-center justify-between mb-6">
               <div>
@@ -304,6 +484,107 @@ export const RideBookingView: React.FC<RideBookingViewProps> = ({ onBack }) => {
         )}
 
       </div>
+
+      {/* Payment Method Selector Sub-modal */}
+      {showPaymentSelector && (
+        <div className="fixed inset-0 z-50 flex flex-col justify-end pointer-events-auto">
+          <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm" onClick={() => setShowPaymentSelector(false)}></div>
+          <div className="bg-slate-900 rounded-t-[2rem] p-6 relative z-10 border-t border-slate-800 max-h-[90vh] w-full overflow-y-auto hide-scrollbar animate-[slideUp_0.3s_ease-out] text-slate-100 pb-12">
+            <div className="w-12 h-1.5 bg-slate-700 rounded-full mx-auto mb-4 cursor-grab"></div>
+            <button 
+              onClick={() => setShowPaymentSelector(false)}
+              className="absolute top-4 right-4 p-2 bg-slate-800 rounded-full text-slate-400 hover:text-white transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="font-bold text-lg text-white">Select Payment Method</h3>
+            </div>
+
+            <div className="space-y-4">
+              {/* Chalo Pay Wallet */}
+              <button 
+                onClick={() => { setSelectedPayment('chalo-pay'); setShowPaymentSelector(false); }}
+                className={`w-full flex items-center justify-between p-4 rounded-2xl border text-left transition-all ${
+                  selectedPayment === 'chalo-pay' ? 'border-brand-500 bg-brand-500/10' : 'border-slate-700 bg-slate-800 hover:bg-slate-700'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <Wallet className="w-5 h-5 text-brand-400" />
+                  <div>
+                    <h4 className="font-bold text-white text-sm">Chalo Pay Wallet</h4>
+                    <p className="text-xs text-slate-400 mt-0.5">Balance: ₹{walletBalance.toFixed(2)}</p>
+                  </div>
+                </div>
+                {selectedPayment === 'chalo-pay' && <CheckCircle2 className="w-5 h-5 text-brand-500" />}
+              </button>
+
+              {/* Saved UPIs */}
+              <div className="space-y-2">
+                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider pl-1">UPI</p>
+                {upis.map(upi => (
+                  <button 
+                    key={upi.id}
+                    onClick={() => { setSelectedPayment(upi.id); setShowPaymentSelector(false); }}
+                    className={`w-full flex items-center justify-between p-4 rounded-2xl border text-left transition-all ${
+                      selectedPayment === upi.id ? 'border-brand-500 bg-brand-500/10' : 'border-slate-700 bg-slate-800 hover:bg-slate-700'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <Smartphone className="w-5 h-5 text-slate-400" />
+                      <div>
+                        <h4 className="font-bold text-white text-sm">{upi.title}</h4>
+                        <p className="text-xs text-slate-400 mt-0.5">{upi.subtitle}</p>
+                      </div>
+                    </div>
+                    {selectedPayment === upi.id && <CheckCircle2 className="w-5 h-5 text-brand-500" />}
+                  </button>
+                ))}
+              </div>
+
+              {/* Saved Cards */}
+              <div className="space-y-2">
+                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider pl-1">Credit & Debit Cards</p>
+                {cards.map(card => (
+                  <button 
+                    key={card.id}
+                    onClick={() => { setSelectedPayment(card.id); setShowPaymentSelector(false); }}
+                    className={`w-full flex items-center justify-between p-4 rounded-2xl border text-left transition-all ${
+                      selectedPayment === card.id ? 'border-brand-500 bg-brand-500/10' : 'border-slate-700 bg-slate-800 hover:bg-slate-700'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <CreditCard className="w-5 h-5 text-slate-400" />
+                      <div>
+                        <h4 className="font-bold text-white text-sm">{card.title}</h4>
+                        <p className="text-xs text-slate-400 mt-0.5">{card.subtitle}</p>
+                      </div>
+                    </div>
+                    {selectedPayment === card.id && <CheckCircle2 className="w-5 h-5 text-brand-500" />}
+                  </button>
+                ))}
+              </div>
+
+              {/* Cash on Delivery */}
+              <button 
+                onClick={() => { setSelectedPayment('cash'); setShowPaymentSelector(false); }}
+                className={`w-full flex items-center justify-between p-4 rounded-2xl border text-left transition-all ${
+                  selectedPayment === 'cash' ? 'border-brand-500 bg-brand-500/10' : 'border-slate-700 bg-slate-800 hover:bg-slate-700'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <Banknote className="w-5 h-5 text-emerald-500" />
+                  <div>
+                    <h4 className="font-bold text-white text-sm">Cash</h4>
+                    <p className="text-xs text-slate-400 mt-0.5">Pay directly to the driver</p>
+                  </div>
+                </div>
+                {selectedPayment === 'cash' && <CheckCircle2 className="w-5 h-5 text-brand-500" />}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
