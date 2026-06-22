@@ -4,7 +4,6 @@ import { RESTAURANTS } from '../constants';
 import { ProviderBadge } from '../components/ProviderBadge';
 import { ChaloLogo } from '../components/Icons';
 import { CartItem, Restaurant, FoodItem, ActivityItem, SavedAddress, SavedMethod, WalletItem } from '../types';
-import { RazorpayCheckout } from '../components/RazorpayCheckout';
 
 interface FoodViewProps {
   onBack: () => void;
@@ -58,7 +57,6 @@ export const FoodView: React.FC<FoodViewProps> = ({ onBack, cart, setCart, walle
   const [showPaymentSelector, setShowPaymentSelector] = useState(false);
   const [showAddCardModal, setShowAddCardModal] = useState(false);
   const [showAddUpiModal, setShowAddUpiModal] = useState(false);
-  const [showRazorpay, setShowRazorpay] = useState(false);
   
   // Selected Address & Payment
   const [selectedAddress, setSelectedAddress] = useState<SavedAddress>(
@@ -179,65 +177,84 @@ export const FoodView: React.FC<FoodViewProps> = ({ onBack, cart, setCart, walle
         alert('Insufficient wallet balance. Please top up or choose another payment method.');
         return;
       }
-      processBooking(grandTotal);
+      setIsProcessing(true);
+      setTimeout(() => {
+        setWallets(wallets.map(w => w.id === selectedPayment ? { ...w, balance: w.balance - grandTotal } : w));
+        setIsProcessing(false);
+        setBookingSuccess(true);
+        
+        // Log Activity
+        onAddActivity({
+          id: `act-${Date.now()}`,
+          provider: selectedRestaurant?.provider || 'chalo',
+          type: 'food',
+          title: `${selectedRestaurant?.name || 'Food'} Order`,
+          date: 'Just Now',
+          status: 'completed',
+          price: grandTotal
+        });
+
+        // Add Reward Points (1 point per ₹10 spent)
+        const earnedPoints = Math.floor(grandTotal / 10);
+        if (earnedPoints > 0) {
+          onAddRewards(earnedPoints, `Food Order: ${selectedRestaurant?.name}`);
+        }
+
+        setCart([]); // Clear cart
+      }, 2000);
     } else if (selectedPayment === 'chalo-pay') {
       if (walletBalance < grandTotal) {
         alert('Insufficient Chalo Pay balance. Please top up or choose another payment method.');
         return;
       }
-      processBooking(grandTotal);
-    } else if (selectedPayment === 'cash') {
-      processBooking(grandTotal);
+      setIsProcessing(true);
+      setTimeout(() => {
+        setWalletBalance(prev => prev - grandTotal);
+        setIsProcessing(false);
+        setBookingSuccess(true);
+
+        // Log Activity
+        onAddActivity({
+          id: `act-${Date.now()}`,
+          provider: selectedRestaurant?.provider || 'chalo',
+          type: 'food',
+          title: `${selectedRestaurant?.name || 'Food'} Order`,
+          date: 'Just Now',
+          status: 'completed',
+          price: grandTotal
+        });
+
+        // Add Reward Points
+        const earnedPoints = Math.floor(grandTotal / 10);
+        if (earnedPoints > 0) {
+          onAddRewards(earnedPoints, `Food Order: ${selectedRestaurant?.name}`);
+        }
+
+        setCart([]); // Clear cart
+      }, 2000);
     } else {
-      // UPI, Card
-      setShowRazorpay(true);
+      // UPI, Card, Cash
+      setIsProcessing(true);
+      setTimeout(() => {
+        setIsProcessing(false);
+        setBookingSuccess(true);
+        onAddActivity({
+          id: `act-${Date.now()}`,
+          provider: selectedRestaurant?.provider || 'chalo',
+          type: 'food',
+          title: `${selectedRestaurant?.name || 'Food'} Order`,
+          date: 'Just Now',
+          status: 'completed',
+          price: grandTotal
+        });
+        onAddRewards(Math.floor(grandTotal / 10), `Food Order: ${selectedRestaurant?.name}`);
+        setCart([]);
+      }, 2000);
     }
-  };
-
-  const processBooking = (amount: number) => {
-    setShowRazorpay(false);
-    setIsProcessing(true);
-    setTimeout(() => {
-      if (selectedPayment === 'chalo-pay') {
-        setWalletBalance(prev => prev - amount);
-      } else if (selectedPayment.startsWith('wallet-')) {
-        setWallets(wallets.map(w => w.id === selectedPayment ? { ...w, balance: w.balance - amount } : w));
-      }
-
-      setIsProcessing(false);
-      setBookingSuccess(true);
-      
-      // Log Activity
-      onAddActivity({
-        id: `act-${Date.now()}`,
-        provider: selectedRestaurant?.provider || 'chalo',
-        type: 'food',
-        title: `${selectedRestaurant?.name || 'Food'} Order`,
-        date: 'Just Now',
-        status: 'completed',
-        price: amount
-      });
-
-      // Add Reward Points (1 point per ₹10 spent)
-      const earnedPoints = Math.floor(amount / 10);
-      if (earnedPoints > 0) {
-        onAddRewards(earnedPoints, `Food Order: ${selectedRestaurant?.name}`);
-      }
-
-      setCart([]); // Clear cart
-    }, 2000);
   };
 
   return (
     <div className="min-h-screen bg-white flex flex-col text-slate-800 font-sans relative">
-      {showRazorpay && (
-        <RazorpayCheckout 
-          amount={cartTotal + (selectedRestaurant?.deliveryFee || 0)} 
-          onSuccess={() => processBooking(cartTotal + (selectedRestaurant?.deliveryFee || 0))} 
-          onCancel={() => setShowRazorpay(false)} 
-        />
-      )}
-
       {/* Header */}
       <div className="bg-slate-950 pt-12 pb-5 px-4 shadow-sm sticky top-0 z-20 border-b border-slate-900 backdrop-blur-md">
         <div className="flex items-center gap-3 mb-4">
@@ -440,7 +457,7 @@ export const FoodView: React.FC<FoodViewProps> = ({ onBack, cart, setCart, walle
       {showCheckout && (
         <div className="fixed inset-0 z-50 flex flex-col justify-end">
           <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm" onClick={() => !isProcessing && !bookingSuccess && setShowCheckout(false)}></div>
-          <div className="bg-white rounded-t-[2.5rem] p-6 relative z-10 border-t border-slate-100 max-h-[90vh] w-full overflow-y-auto hide-scrollbar animate-[slideUp_0.3s_ease-out] text-slate-800 pb-12">
+          <div className="bg-white rounded-t-[2.5rem] p-6 relative z-10 border-t border-slate-100 max-h-[90vh] w-full overflow-y-auto hide-scrollbar animate-[slideUp_0.3s_ease-out] text-slate-800 pb-8">
             <div className="w-12 h-1.5 bg-slate-200 rounded-full mx-auto mb-4 cursor-grab"></div>
             <button 
               onClick={() => setShowCheckout(false)}
@@ -598,7 +615,7 @@ export const FoodView: React.FC<FoodViewProps> = ({ onBack, cart, setCart, walle
       {showAddressSelector && (
         <div className="fixed inset-0 z-50 flex flex-col justify-end">
           <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm" onClick={() => setShowAddressSelector(false)}></div>
-          <div className="bg-white rounded-t-[2rem] p-6 relative z-10 border-t border-slate-100 max-h-[90vh] w-full overflow-y-auto hide-scrollbar animate-[slideUp_0.3s_ease-out] text-slate-800 pb-12">
+          <div className="bg-white rounded-t-[2rem] p-6 relative z-10 border-t border-slate-100 max-h-[90vh] w-full overflow-y-auto hide-scrollbar animate-[slideUp_0.3s_ease-out] text-slate-800 pb-8">
             <div className="w-12 h-1.5 bg-slate-200 rounded-full mx-auto mb-4 cursor-grab"></div>
             <button 
               onClick={() => setShowAddressSelector(false)}
@@ -634,7 +651,7 @@ export const FoodView: React.FC<FoodViewProps> = ({ onBack, cart, setCart, walle
       {showPaymentSelector && (
         <div className="fixed inset-0 z-50 flex flex-col justify-end">
           <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm" onClick={() => setShowPaymentSelector(false)}></div>
-          <div className="bg-white rounded-t-[2rem] p-6 relative z-10 border-t border-slate-100 max-h-[90vh] w-full overflow-y-auto hide-scrollbar animate-[slideUp_0.3s_ease-out] text-slate-800 pb-12">
+          <div className="bg-white rounded-t-[2rem] p-6 relative z-10 border-t border-slate-100 max-h-[90vh] w-full overflow-y-auto hide-scrollbar animate-[slideUp_0.3s_ease-out] text-slate-800 pb-8">
             <div className="w-12 h-1.5 bg-slate-200 rounded-full mx-auto mb-4 cursor-grab"></div>
             <button 
               onClick={() => setShowPaymentSelector(false)}
@@ -651,7 +668,7 @@ export const FoodView: React.FC<FoodViewProps> = ({ onBack, cart, setCart, walle
               <button 
                 onClick={() => { setSelectedPayment('chalo-pay'); setShowPaymentSelector(false); }}
                 className={`w-full flex items-center justify-between p-4 rounded-2xl border text-left transition-all ${
-                  selectedPayment === 'chalo-pay' ? 'border-brand-500 bg-brand-500/10' : 'border-slate-100 bg-slate-50 hover:bg-slate-100'
+                  selectedPayment === 'chalo-pay' ? 'border-brand-500 bg-brand-50/30' : 'border-slate-100 bg-slate-50 hover:bg-slate-100'
                 }`}
               >
                 <div className="flex items-center gap-3">
@@ -747,7 +764,7 @@ export const FoodView: React.FC<FoodViewProps> = ({ onBack, cart, setCart, walle
       {showAddCardModal && (
         <div className="fixed inset-0 z-50 flex flex-col justify-end">
           <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm" onClick={() => setShowAddCardModal(false)}></div>
-          <div className="bg-white rounded-t-[2rem] p-6 relative z-10 border-t border-slate-100 max-h-[90vh] w-full overflow-y-auto hide-scrollbar animate-[slideUp_0.3s_ease-out] text-slate-800 pb-12">
+          <div className="bg-white rounded-t-[2rem] p-6 relative z-10 border-t border-slate-100 max-h-[90vh] w-full overflow-y-auto hide-scrollbar animate-[slideUp_0.3s_ease-out] text-slate-800 pb-8">
             <div className="w-12 h-1.5 bg-slate-200 rounded-full mx-auto mb-4 cursor-grab"></div>
             <button 
               onClick={() => setShowAddCardModal(false)}
@@ -836,7 +853,7 @@ export const FoodView: React.FC<FoodViewProps> = ({ onBack, cart, setCart, walle
       {showAddUpiModal && (
         <div className="fixed inset-0 z-50 flex flex-col justify-end">
           <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm" onClick={() => setShowAddUpiModal(false)}></div>
-          <div className="bg-white rounded-t-[2rem] p-6 relative z-10 border-t border-slate-100 max-h-[90vh] w-full overflow-y-auto hide-scrollbar animate-[slideUp_0.3s_ease-out] text-slate-800 pb-12">
+          <div className="bg-white rounded-t-[2rem] p-6 relative z-10 border-t border-slate-100 max-h-[90vh] w-full overflow-y-auto hide-scrollbar animate-[slideUp_0.3s_ease-out] text-slate-800 pb-8">
             <div className="w-12 h-1.5 bg-slate-200 rounded-full mx-auto mb-4 cursor-grab"></div>
             <button 
               onClick={() => setShowAddUpiModal(false)}
