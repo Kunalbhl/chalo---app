@@ -3,9 +3,8 @@ export type FoodProvider = 'zomato' | 'swiggy' | 'eatsure' | 'chalo';
 export type MartProvider = 'zepto' | 'blinkit' | 'instamart' | 'chalo';
 export type StayProvider = 'makemytrip' | 'agoda' | 'oyo' | 'airbnb' | 'bookingcom' | 'goibibo' | 'cleartrip' | 'chalo';
 export type TravelProvider = 'irctc' | 'makemytrip' | 'cleartrip' | 'ixigo' | 'skyscanner' | 'kayak' | 'chalo';
-export type IntercityProvider = 'redbus' | 'makemytrip' | 'chalo' | 'ola' | 'uber';
 
-export type AnyProvider = RideProvider | FoodProvider | MartProvider | StayProvider | TravelProvider | IntercityProvider;
+export type AnyProvider = RideProvider | FoodProvider | MartProvider | StayProvider | TravelProvider;
 
 export interface VehicleOption {
   id: string;
@@ -19,18 +18,6 @@ export interface VehicleOption {
   isPromo?: boolean;
 }
 
-export interface IntercityVehicleOption {
-  id: string;
-  provider: IntercityProvider;
-  name: string;
-  type: 'Hatchback' | 'Sedan' | 'SUV' | 'Tempo Traveller' | 'Bus';
-  description: string;
-  price: number;
-  capacity: number;
-  features: string[];
-  imageUrl: string;
-}
-
 export interface Location {
   name: string;
   address: string;
@@ -40,28 +27,18 @@ export interface SavedAddress {
   id: string;
   label: 'Home' | 'Work' | 'Other';
   customName?: string;
-  flatNo: string;
-  area: string;
-  city: string;
-  state: string;
-  pincode: string;
-  fullAddress: string;
+  address: string;
+  fullAddress?: string;
+  isPrimary: boolean;
   isPreferred: boolean;
   lat: number;
   lng: number;
 }
 
-export interface Guest {
-  id: string;
-  name: string;
-  phone: string;
-  email: string;
-}
-
 export interface ActivityItem {
   id: string;
   provider: AnyProvider;
-  type: 'ride' | 'food' | 'mart' | 'stays' | 'intercity' | 'flights';
+  type: 'ride' | 'food' | 'mart' | 'stays' | 'flights' | 'intercity';
   title: string;
   date: string;
   status: 'completed' | 'cancelled' | 'ongoing';
@@ -160,5 +137,44 @@ export interface WalletItem {
   domain: string;
 }
 
-export type ViewState = 'home' | 'activity' | 'account' | 'booking' | 'food' | 'mart' | 'stays' | 'flights' | 'intercity' | 'insurance' | 'gifts' | 'pay_bills' | 'more' | 'linked_accounts' | 'payment_methods' | 'address_management';
-export type BookingStep = 'search' | 'select_vehicle' | 'confirming' | 'on_way';
+export interface Guest {
+  id: string;
+  name: string;
+  phone: string;
+  email: string;
+}
+
+export interface ChatMessage {
+  id: string;
+  role: 'user' | 'model';
+  text: string;
+  timestamp: Date;
+}
+
+export interface LinkedAccount {
+  id: string;
+  providerId: AnyProvider;
+  linkedSince: string;
+  username: string;
+}
+
+export interface TicketMessage {
+  id: string;
+  sender: 'user' | 'support';
+  text: string;
+  timestamp: string;
+}
+
+export interface Ticket {
+  id: string;
+  title: string;
+  category: string;
+  status: 'Open' | 'In Progress' | 'Resolved';
+  date: string;
+  messages: TicketMessage[];
+}
+
+export type Theme = 'system' | 'light' | 'dark';
+
+export type ViewState = 'home' | 'activity' | 'account' | 'booking' | 'food' | 'mart' | 'stays' | 'flights' | 'intercity' | 'insurance' | 'gifts' | 'pay_bills' | 'more' | 'linked_accounts' | 'payment_methods' | 'address_management' | 'ai' | 'support';
+export type BookingStep = 'search' | 'verify_pickup' | 'select_vehicle' | 'confirming' | 'accepted' | 'on_way';
