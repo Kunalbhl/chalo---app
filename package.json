@@ -1,5 +1,5 @@
 {
-  "name": "chalo-india-s-everyday-super-app",
+  "name": "chalo-super-app",
   "workspaces": ["frontend", "backend"], 
   "scripts": {
     "dev-frontend": "npm run dev --prefix frontend",
