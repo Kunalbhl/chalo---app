@@ -4,7 +4,6 @@ import { MART_CATEGORIES, MART_ITEMS } from '../constants';
 import { ProviderBadge } from '../components/ProviderBadge';
 import { ChaloLogo } from '../components/Icons';
 import { CartItem, MartItem, ActivityItem, SavedAddress, SavedMethod, WalletItem } from '../types';
-import { RazorpayCheckout } from '../components/RazorpayCheckout';
 
 interface MartViewProps {
   onBack: () => void;
@@ -47,7 +46,6 @@ export const MartView: React.FC<MartViewProps> = ({ onBack, cart, setCart, walle
   const [showPaymentSelector, setShowPaymentSelector] = useState(false);
   const [showAddCardModal, setShowAddCardModal] = useState(false);
   const [showAddUpiModal, setShowAddUpiModal] = useState(false);
-  const [showRazorpay, setShowRazorpay] = useState(false);
   
   // Selected Address & Payment
   const [selectedAddress, setSelectedAddress] = useState<SavedAddress>(
@@ -173,12 +171,11 @@ export const MartView: React.FC<MartViewProps> = ({ onBack, cart, setCart, walle
       processBooking(grandTotal);
     } else {
       // UPI, Card
-      setShowRazorpay(true);
+      processBooking(grandTotal);
     }
   };
 
   const processBooking = (amount: number) => {
-    setShowRazorpay(false);
     setIsProcessing(true);
     setTimeout(() => {
       if (selectedPayment === 'chalo-pay') {
@@ -213,14 +210,6 @@ export const MartView: React.FC<MartViewProps> = ({ onBack, cart, setCart, walle
 
   return (
     <div className="min-h-screen bg-white flex flex-col text-slate-800 font-sans relative">
-      {showRazorpay && (
-        <RazorpayCheckout 
-          amount={cartTotal + 25} 
-          onSuccess={() => processBooking(cartTotal + 25)} 
-          onCancel={() => setShowRazorpay(false)} 
-        />
-      )}
-
       {/* Premium Dark Header with Light Grey Search Bar */}
       <div className="bg-slate-950 pt-12 pb-6 px-4 text-white sticky top-0 z-20 rounded-b-3xl shadow-md border-b border-slate-900 backdrop-blur-md">
         <div className="flex items-center justify-between mb-4">
