@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
-import { User, CreditCard, Settings, HelpCircle, ChevronRight, LogOut, Link as LinkIcon, Edit2, X, ShieldCheck, Bell, Mail, Smartphone, MapPin, Moon, Sun, Monitor, Camera } from 'lucide-react';
-import { ViewState, Theme } from '../types';
+import { User, CreditCard, Settings, HelpCircle, ChevronRight, LogOut, Link as LinkIcon, Edit2, X, ShieldCheck, Bell, Mail, Smartphone, MapPin, Moon, Sun, Monitor, Camera, Fingerprint, AlertTriangle } from 'lucide-react';
+import { ViewState, Theme, SecurityLog } from '../types';
 
 interface AccountViewProps {
   onChangeView: (view: ViewState) => void;
@@ -16,6 +16,9 @@ interface AccountViewProps {
   onUpdateProfilePic: (pic: string) => void;
   appTheme: Theme;
   onUpdateTheme: (theme: Theme) => void;
+  biometricEnabled: boolean;
+  onUpdateBiometric: (enabled: boolean) => void;
+  securityLogs: SecurityLog[];
   preferredPayment: string;
   onUpdatePreferredPayment: (methodId: string) => void;
   isEditingProfile: boolean;
@@ -37,6 +40,9 @@ export const AccountView: React.FC<AccountViewProps> = ({
   onUpdateProfilePic,
   appTheme,
   onUpdateTheme,
+  biometricEnabled,
+  onUpdateBiometric,
+  securityLogs,
   preferredPayment, 
   onUpdatePreferredPayment, 
   isEditingProfile, 
@@ -50,8 +56,11 @@ export const AccountView: React.FC<AccountViewProps> = ({
   const [tempPic, setTempPic] = useState(profilePic);
   
   const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [showSecurityLogs, setShowSecurityLogs] = useState(false);
+  const [isAuthenticatingLogs, setIsAuthenticatingLogs] = useState(false);
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [tempTheme, setTempTheme] = useState<Theme>(appTheme);
+  const [tempBiometric, setTempBiometric] = useState(biometricEnabled);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -70,6 +79,7 @@ export const AccountView: React.FC<AccountViewProps> = ({
 
   const handleSaveSettings = () => {
     onUpdateTheme(tempTheme);
+    onUpdateBiometric(tempBiometric);
     setShowSettingsModal(false);
     alert('Settings saved successfully!');
   };
@@ -82,6 +92,18 @@ export const AccountView: React.FC<AccountViewProps> = ({
         setTempPic(reader.result as string);
       };
       reader.readAsDataURL(file);
+    }
+  };
+
+  const handleViewSecurityLogs = () => {
+    if (biometricEnabled) {
+      setIsAuthenticatingLogs(true);
+      setTimeout(() => {
+        setIsAuthenticatingLogs(false);
+        setShowSecurityLogs(true);
+      }, 1500);
+    } else {
+      setShowSecurityLogs(true);
     }
   };
 
@@ -142,8 +164,8 @@ export const AccountView: React.FC<AccountViewProps> = ({
         <div className="bg-slate-50 rounded-3xl shadow-soft border border-slate-100 overflow-hidden">
           <MenuItem 
             icon={<Settings className="w-5 h-5" />} 
-            title="Settings" 
-            subtitle="App theme & notifications" 
+            title="Settings & Security" 
+            subtitle="App theme, biometrics, logs" 
             onClick={() => setShowSettingsModal(true)}
           />
           <MenuItem 
@@ -295,7 +317,7 @@ export const AccountView: React.FC<AccountViewProps> = ({
               <div className="w-16 h-16 bg-indigo-50 rounded-2xl flex items-center justify-center mb-4 border border-indigo-100 shadow-sm">
                 <Settings className="w-8 h-8 text-indigo-600" />
               </div>
-              <h2 className="text-2xl font-extrabold text-slate-900">App Settings</h2>
+              <h2 className="text-2xl font-extrabold text-slate-900">Settings & Security</h2>
               <p className="text-sm text-slate-500 font-medium mt-1">Customize your Chalo experience</p>
             </div>
 
@@ -329,6 +351,36 @@ export const AccountView: React.FC<AccountViewProps> = ({
               </div>
             </div>
 
+            {/* Security Settings */}
+            <div className="space-y-4 mb-6">
+              <h3 className="font-bold text-slate-900 text-sm uppercase tracking-wider flex items-center gap-2">
+                <ShieldCheck className="w-4 h-4 text-brand-600" /> Security
+              </h3>
+              <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                <div>
+                  <h4 className="text-sm font-bold text-slate-800">Biometric Login</h4>
+                  <p className="text-xs text-slate-500 mt-0.5">Use Fingerprint or Face ID</p>
+                </div>
+                <input 
+                  type="checkbox" 
+                  checked={tempBiometric}
+                  onChange={(e) => setTempBiometric(e.target.checked)}
+                  className="w-10 h-5 bg-slate-200 rounded-full appearance-none checked:bg-brand-600 relative transition-colors cursor-pointer before:content-[''] before:absolute before:w-4 before:h-4 before:rounded-full before:bg-white before:top-0.5 before:left-0.5 checked:before:translate-x-5 before:transition-transform"
+                />
+              </div>
+              
+              <button 
+                onClick={handleViewSecurityLogs}
+                className="w-full flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100 hover:bg-slate-100 transition-colors"
+              >
+                <div>
+                  <h4 className="text-sm font-bold text-slate-800 text-left">Security Audit Logs</h4>
+                  <p className="text-xs text-slate-500 mt-0.5 text-left">View failed logins & suspicious activity</p>
+                </div>
+                <ChevronRight className="w-5 h-5 text-slate-400" />
+              </button>
+            </div>
+
             {/* Notification Settings */}
             <div className="space-y-4 mb-6">
               <h3 className="font-bold text-slate-900 text-sm uppercase tracking-wider flex items-center gap-2">
@@ -354,9 +406,64 @@ export const AccountView: React.FC<AccountViewProps> = ({
             >
               Save Settings
             </button>
+          </div>
+        </div>
+      )}
 
-            <div className="flex items-center justify-center gap-2 text-xs font-bold text-slate-400 uppercase tracking-wider pt-4 mt-4 border-t border-slate-100">
-              <ShieldCheck className="w-4 h-4" /> Settings Secured & Saved
+      {/* Authenticating Logs Overlay */}
+      {isAuthenticatingLogs && (
+        <div className="fixed inset-0 z-[60] bg-slate-950/90 backdrop-blur-sm flex flex-col items-center justify-center text-white">
+          <Fingerprint className="w-16 h-16 text-brand-500 animate-pulse mb-4" />
+          <p className="font-bold text-lg">Verify Identity</p>
+          <p className="text-sm text-slate-400 mt-2">Please authenticate to view security logs</p>
+        </div>
+      )}
+
+      {/* Security Logs Modal */}
+      {showSecurityLogs && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm" onClick={() => setShowSecurityLogs(false)}></div>
+          <div className="bg-white rounded-[2rem] p-6 relative z-10 border border-slate-100 w-full max-w-md max-h-[90vh] overflow-y-auto hide-scrollbar animate-[fadeIn_0.2s_ease-out] text-slate-800 shadow-2xl">
+            <button 
+              onClick={() => setShowSecurityLogs(false)}
+              className="absolute top-4 right-4 p-2 bg-slate-100 rounded-full text-slate-500 hover:bg-slate-200 transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex flex-col items-center text-center mt-2 mb-6">
+              <div className="w-16 h-16 bg-rose-50 rounded-2xl flex items-center justify-center mb-4 border border-rose-100 shadow-sm">
+                <AlertTriangle className="w-8 h-8 text-rose-600" />
+              </div>
+              <h2 className="text-2xl font-extrabold text-slate-900">Security Logs</h2>
+              <p className="text-sm text-slate-500 font-medium mt-1">Recent suspicious activities</p>
+            </div>
+
+            <div className="space-y-4">
+              {securityLogs.length === 0 ? (
+                <div className="text-center py-8">
+                  <ShieldCheck className="w-12 h-12 text-emerald-500 mx-auto mb-3" />
+                  <p className="font-bold text-slate-800">All Secure</p>
+                  <p className="text-sm text-slate-500 mt-1">No suspicious activity detected.</p>
+                </div>
+              ) : (
+                securityLogs.map(log => (
+                  <div key={log.id} className="bg-slate-50 rounded-2xl p-4 border border-slate-200">
+                    <div className="flex justify-between items-start mb-2">
+                      <span className="bg-rose-100 text-rose-700 text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider">
+                        {log.type.replace('_', ' ')}
+                      </span>
+                      <span className="text-xs text-slate-500 font-medium">{log.timestamp}</span>
+                    </div>
+                    <p className="text-sm font-bold text-slate-800 mb-3">{log.details}</p>
+                    {log.imageUrl && (
+                      <div className="mt-2 rounded-xl overflow-hidden border border-slate-200">
+                        <img src={log.imageUrl} alt="Security Capture" className="w-full h-auto" />
+                      </div>
+                    )}
+                  </div>
+                ))
+              )}
             </div>
           </div>
         </div>
