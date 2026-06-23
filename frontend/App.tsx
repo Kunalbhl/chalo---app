@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ViewState, RewardTransaction, SavedAddress, CartItem, ActivityItem, SavedMethod, WalletItem, Guest, LinkedAccount, Ticket, Theme } from './types';
+import { ViewState, RewardTransaction, SavedAddress, CartItem, ActivityItem, SavedMethod, WalletItem, Guest, LinkedAccount, Ticket, Theme, SecurityLog } from './types';
 import { BottomNav } from './components/BottomNav';
 import { HomeView } from './views/HomeView';
 import { RideBookingView } from './views/RideBookingView';
@@ -17,6 +17,7 @@ import { AddressManagementView } from './views/AddressManagementView';
 import { AIAssistantView } from './views/AIAssistantView';
 import { SupportView } from './views/SupportView';
 import { AuthView } from './views/AuthView';
+import { OnboardingView } from './views/OnboardingView';
 import { RECENT_ACTIVITY } from './constants';
 
 // Custom hook for localStorage persistence
@@ -44,6 +45,7 @@ function useLocalStorage<T>(key: string, initialValue: T): [T, React.Dispatch<Re
 
 const App: React.FC = () => {
   const [isAuthenticated, setIsAuthenticated] = useLocalStorage<boolean>('chalo_isAuthenticated', false);
+  const [hasCompletedOnboarding, setHasCompletedOnboarding] = useLocalStorage<boolean>('chalo_hasCompletedOnboarding', false);
   const [currentView, setCurrentView] = useState<ViewState>('home');
   
   // Persisted States
@@ -56,6 +58,8 @@ const App: React.FC = () => {
   const [profileGender, setProfileGender] = useLocalStorage<'Male' | 'Female' | 'Other'>('chalo_profileGender', 'Male');
   const [profilePic, setProfilePic] = useLocalStorage<string>('chalo_profilePic', '');
   const [appTheme, setAppTheme] = useLocalStorage<Theme>('chalo_theme', 'system');
+  const [biometricEnabled, setBiometricEnabled] = useLocalStorage<boolean>('chalo_biometricEnabled', false);
+  const [securityLogs, setSecurityLogs] = useLocalStorage<SecurityLog[]>('chalo_securityLogs', []);
   
   const [preferredPayment, setPreferredPayment] = useLocalStorage<string>('chalo_preferredPayment', 'upi-gpay');
   const [currentLocation, setCurrentLocation] = useLocalStorage<string>('chalo_currentLocation', '123, Palm Grove Apartments, Indiranagar, Bengaluru, Karnataka 560038');
@@ -123,16 +127,25 @@ const App: React.FC = () => {
 
   const [isEditingProfile, setIsEditingProfile] = useState<boolean>(false);
 
-  const handleLoginSuccess = (userData: { name: string; email: string; phone: string }) => {
+  const handleLoginSuccess = (userData: { name: string; email: string; phone: string }, isNewUser: boolean) => {
     setProfileName(userData.name);
     setProfileEmail(userData.email);
     setProfilePhone(userData.phone);
     setIsAuthenticated(true);
-    setCurrentView('home');
+    if (isNewUser) {
+      setCurrentView('onboarding');
+    } else {
+      setCurrentView('home');
+    }
   };
 
   const handleLogout = () => {
     setIsAuthenticated(false);
+    setCurrentView('home');
+  };
+
+  const handleOnboardingComplete = () => {
+    setHasCompletedOnboarding(true);
     setCurrentView('home');
   };
 
@@ -198,12 +211,24 @@ const App: React.FC = () => {
     setIsEditingProfile(true);
   };
 
+  const handleAddSecurityLog = (log: SecurityLog) => {
+    setSecurityLogs(prev => [log, ...prev]);
+  };
+
   if (!isAuthenticated) {
-    return <AuthView onLoginSuccess={handleLoginSuccess} />;
+    return (
+      <AuthView 
+        onLoginSuccess={handleLoginSuccess} 
+        biometricEnabled={biometricEnabled}
+        onAddSecurityLog={handleAddSecurityLog}
+      />
+    );
   }
 
   const renderView = () => {
     switch (currentView) {
+      case 'onboarding':
+        return <OnboardingView onComplete={handleOnboardingComplete} />;
       case 'home':
         return (
           <HomeView 
@@ -377,6 +402,9 @@ const App: React.FC = () => {
             onUpdateProfilePic={setProfilePic}
             appTheme={appTheme}
             onUpdateTheme={setAppTheme}
+            biometricEnabled={biometricEnabled}
+            onUpdateBiometric={setBiometricEnabled}
+            securityLogs={securityLogs}
             preferredPayment={preferredPayment}
             onUpdatePreferredPayment={handleUpdatePreferredPayment}
             isEditingProfile={isEditingProfile}
@@ -389,7 +417,7 @@ const App: React.FC = () => {
     }
   };
 
-  const hideBottomNav = currentView === 'booking' || currentView === 'ai' || currentView === 'support' || currentView === 'intercity';
+  const hideBottomNav = currentView === 'booking' || currentView === 'ai' || currentView === 'support' || currentView === 'intercity' || currentView === 'onboarding';
 
   return (
     <div className={`w-full h-full relative font-sans min-h-screen ${appTheme === 'dark' ? 'bg-slate-950 text-white' : 'bg-white text-slate-800'}`}>
