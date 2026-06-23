@@ -708,7 +708,7 @@ export const FoodView: React.FC<FoodViewProps> = ({ onBack, cart, setCart, walle
                       <CreditCard className="w-5 h-5 text-slate-600" />
                       <div>
                         <h4 className="font-bold text-slate-900 text-sm">{card.title}</h4>
-                        <p className="text-xs text-slate-400 mt-0.5">{card.subtitle}</p>
+                        <p className="text-xs text-slate-500 mt-0.5">{card.subtitle}</p>
                       </div>
                     </div>
                     {selectedPayment === card.id && <CheckCircle2 className="w-5 h-5 text-brand-600" />}
