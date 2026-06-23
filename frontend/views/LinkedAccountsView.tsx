@@ -166,35 +166,36 @@ export const LinkedAccountsView: React.FC<LinkedAccountsViewProps> = ({ onBack, 
         ))}
       </div>
 
-      {/* Simulated OAuth Bottom Sheet */}
+      {/* Simulated OAuth Bottom Sheet - Full Screen on Mobile */}
       {linkingProvider && (
-        <div className="absolute inset-0 z-50 flex flex-col justify-end">
-          <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm" onClick={() => loginStep !== 'loading' && setLinkingProvider(null)}></div>
-          <div className="bg-slate-900 rounded-t-[2rem] p-6 relative z-10 border-t border-slate-800 animate-[slideUp_0.3s_ease-out] pb-12">
+        <div className="fixed inset-0 z-50 flex flex-col bg-slate-900 animate-[slideUp_0.3s_ease-out]">
+          <div className="p-4 flex justify-end">
             <button 
               onClick={() => loginStep !== 'loading' && setLinkingProvider(null)}
-              className="absolute top-4 right-4 p-2 bg-slate-800 rounded-full text-slate-400 hover:text-white"
+              className="p-2 bg-slate-800 rounded-full text-slate-400 hover:text-white"
               disabled={loginStep === 'loading'}
             >
               <X className="w-5 h-5" />
             </button>
-            
-            <div className="flex flex-col items-center text-center mt-4 mb-6">
-              <div className="flex items-center justify-center gap-4 mb-4">
-                <div className="w-14 h-14 bg-brand-600 text-white rounded-2xl flex items-center justify-center font-bold text-xl shadow-md">C</div>
-                <div className="flex space-x-1">
-                  <div className="w-1.5 h-1.5 bg-slate-700 rounded-full animate-pulse"></div>
-                  <div className="w-1.5 h-1.5 bg-slate-700 rounded-full animate-pulse delay-75"></div>
-                  <div className="w-1.5 h-1.5 bg-slate-700 rounded-full animate-pulse delay-150"></div>
+          </div>
+          
+          <div className="flex-1 flex flex-col items-center justify-center p-6">
+            <div className="flex flex-col items-center text-center mb-8">
+              <div className="flex items-center justify-center gap-4 mb-6">
+                <div className="w-16 h-16 bg-brand-600 text-white rounded-2xl flex items-center justify-center font-bold text-2xl shadow-md">C</div>
+                <div className="flex space-x-1.5">
+                  <div className="w-2 h-2 bg-slate-700 rounded-full animate-pulse"></div>
+                  <div className="w-2 h-2 bg-slate-700 rounded-full animate-pulse delay-75"></div>
+                  <div className="w-2 h-2 bg-slate-700 rounded-full animate-pulse delay-150"></div>
                 </div>
-                <div className={`w-14 h-14 rounded-2xl flex items-center justify-center font-bold text-xl shadow-md bg-white border border-slate-800 overflow-hidden`}>
-                  <img src={`https://icon.horse/icon/${linkingProvider.domain}`} alt={linkingProvider.name} className="w-10 h-10 object-contain" />
+                <div className={`w-16 h-16 rounded-2xl flex items-center justify-center font-bold text-2xl shadow-md bg-white border border-slate-800 overflow-hidden`}>
+                  <img src={`https://icon.horse/icon/${linkingProvider.domain}`} alt={linkingProvider.name} className="w-12 h-12 object-contain" />
                 </div>
               </div>
-              <h2 className="text-2xl font-bold text-white mb-1">
+              <h2 className="text-3xl font-bold text-white mb-2">
                 {loginStep === 'intro' ? `Connect ${linkingProvider.name}` : `Login to ${linkingProvider.name}`}
               </h2>
-              <p className="text-sm text-slate-400 font-medium px-4">
+              <p className="text-base text-slate-400 font-medium px-4 max-w-xs">
                 {loginStep === 'intro' 
                   ? `Chalo wants to access your ${linkingProvider.name} account to fetch prices and place orders on your behalf.`
                   : `Enter your ${linkingProvider.name} credentials to securely link your account.`}
@@ -203,11 +204,11 @@ export const LinkedAccountsView: React.FC<LinkedAccountsViewProps> = ({ onBack, 
 
             {loginStep === 'loading' ? (
               <div className="py-8 flex flex-col items-center">
-                <div className="w-10 h-10 border-4 border-brand-500 border-t-brand-600 rounded-full animate-spin mb-4"></div>
-                <p className="text-sm font-bold text-slate-400">Authenticating securely...</p>
+                <div className="w-12 h-12 border-4 border-brand-500 border-t-brand-600 rounded-full animate-spin mb-4"></div>
+                <p className="text-base font-bold text-slate-400">Authenticating securely...</p>
               </div>
             ) : loginStep === 'intro' ? (
-              <div className="space-y-3">
+              <div className="w-full max-w-sm space-y-4">
                 <button 
                   onClick={() => setLoginStep('form')}
                   className={`w-full py-4 rounded-xl font-bold text-lg shadow-md transition-transform active:scale-[0.98] ${linkingProvider.color} ${linkingProvider.textColor}`}
@@ -222,7 +223,7 @@ export const LinkedAccountsView: React.FC<LinkedAccountsViewProps> = ({ onBack, 
                 </button>
               </div>
             ) : (
-              <form onSubmit={handleLoginSubmit} className="space-y-4">
+              <form onSubmit={handleLoginSubmit} className="w-full max-w-sm space-y-4">
                 <div className="relative">
                   <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500" />
                   <input 
@@ -231,7 +232,7 @@ export const LinkedAccountsView: React.FC<LinkedAccountsViewProps> = ({ onBack, 
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="Email or Phone Number" 
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl py-3.5 pl-12 pr-4 text-white focus:ring-2 focus:ring-brand-500 outline-none font-medium"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl py-4 pl-12 pr-4 text-white focus:ring-2 focus:ring-brand-500 outline-none font-medium"
                   />
                 </div>
                 <div className="relative">
@@ -242,19 +243,19 @@ export const LinkedAccountsView: React.FC<LinkedAccountsViewProps> = ({ onBack, 
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="Password" 
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl py-3.5 pl-12 pr-4 text-white focus:ring-2 focus:ring-brand-500 outline-none font-medium"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl py-4 pl-12 pr-4 text-white focus:ring-2 focus:ring-brand-500 outline-none font-medium"
                   />
                 </div>
                 <button 
                   type="submit"
-                  className={`w-full py-4 mt-2 rounded-xl font-bold text-lg shadow-md transition-transform active:scale-[0.98] ${linkingProvider.color} ${linkingProvider.textColor}`}
+                  className={`w-full py-4 mt-4 rounded-xl font-bold text-lg shadow-md transition-transform active:scale-[0.98] ${linkingProvider.color} ${linkingProvider.textColor}`}
                 >
                   Secure Login
                 </button>
               </form>
             )}
-            <div className="mt-6 flex items-center justify-center gap-2 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-              <Smartphone className="w-3.5 h-3.5" /> Secured by Chalo OAuth
+            <div className="mt-auto pt-8 flex items-center justify-center gap-2 text-xs font-bold text-slate-500 uppercase tracking-wider">
+              <Smartphone className="w-4 h-4" /> Secured by Chalo OAuth
             </div>
           </div>
         </div>
