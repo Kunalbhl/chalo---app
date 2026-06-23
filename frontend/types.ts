@@ -176,5 +176,13 @@ export interface Ticket {
 
 export type Theme = 'system' | 'light' | 'dark';
 
-export type ViewState = 'home' | 'activity' | 'account' | 'booking' | 'food' | 'mart' | 'stays' | 'flights' | 'intercity' | 'insurance' | 'gifts' | 'pay_bills' | 'more' | 'linked_accounts' | 'payment_methods' | 'address_management' | 'ai' | 'support';
+export interface SecurityLog {
+  id: string;
+  timestamp: string;
+  type: 'failed_login' | 'suspicious_activity';
+  details: string;
+  imageUrl?: string;
+}
+
+export type ViewState = 'home' | 'activity' | 'account' | 'booking' | 'food' | 'mart' | 'stays' | 'flights' | 'intercity' | 'insurance' | 'gifts' | 'pay_bills' | 'more' | 'linked_accounts' | 'payment_methods' | 'address_management' | 'ai' | 'support' | 'onboarding';
 export type BookingStep = 'search' | 'verify_pickup' | 'select_vehicle' | 'confirming' | 'accepted' | 'on_way';
